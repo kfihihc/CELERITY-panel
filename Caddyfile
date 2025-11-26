@@ -2,8 +2,13 @@
     tls {$ACME_EMAIL}
     
     reverse_proxy backend:3000 {
-        # WebSocket для SSH терминала
-        header_up X-Forwarded-Proto https
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # WebSocket support
+        transport http {
+            versions h2c 1.1
+        }
     }
 }
-

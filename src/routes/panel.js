@@ -96,7 +96,11 @@ const checkIpWhitelist = (req, res, next) => {
     const whitelist = parseIpWhitelist();
     if (!whitelist) return next(); // Нет whitelist - пропускаем всех
     
-    const clientIp = req.ip || req.connection.remoteAddress || '';
+    // Получаем реальный IP (X-Forwarded-For от Caddy или прямой)
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const clientIp = forwardedFor 
+        ? forwardedFor.split(',')[0].trim()
+        : (req.ip || req.connection.remoteAddress || '');
     
     if (!isIpAllowed(clientIp, whitelist)) {
         logger.warn(`[Panel] Access denied for IP: ${clientIp}`);

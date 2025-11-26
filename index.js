@@ -32,6 +32,9 @@ const panelRoutes = require('./src/routes/panel');
 
 const app = express();
 
+// Trust proxy (Caddy)
+app.set('trust proxy', true);
+
 // ==================== MIDDLEWARE ====================
 
 // CORS: ограничиваем только на свой домен
