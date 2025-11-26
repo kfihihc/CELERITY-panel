@@ -20,6 +20,7 @@ const { WebSocketServer } = require('ws');
 const config = require('./config');
 const logger = require('./src/utils/logger');
 const requireAuth = require('./src/middleware/auth');
+const { i18nMiddleware } = require('./src/middleware/i18n');
 const syncService = require('./src/services/syncService');
 
 // Роуты API
@@ -51,6 +52,9 @@ app.use(session({
         maxAge: 24 * 60 * 60 * 1000 // 24 часа
     }
 }));
+
+// Интернационализация (i18n)
+app.use(i18nMiddleware);
 
 // Статика
 app.use(express.static(path.join(__dirname, 'public')));

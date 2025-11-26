@@ -1,5 +1,7 @@
 # Hysteria Panel
 
+**[English](README.md)** | [Русский](README.ru.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](package.json)
@@ -9,20 +11,21 @@ Web panel for managing [Hysteria 2](https://v2.hysteria.network/) proxy servers 
 
 ## ⚡ Quick Start
 
+**1. Install Docker** (if not installed):
 ```bash
-# Clone
+curl -fsSL https://get.docker.com | sh
+```
+
+**2. Deploy panel:**
+```bash
 git clone https://github.com/ClickDevTech/hysteria-panel.git
 cd hysteria-panel
-
-# Configure
 cp docker.env.example .env
 nano .env  # Set your domain, email, and secrets
-
-# Run
-docker-compose up -d
-
-# Open https://your-domain/panel
+docker compose up -d
 ```
+
+**3. Open** `https://your-domain/panel`
 
 **Required `.env` variables:**
 ```env

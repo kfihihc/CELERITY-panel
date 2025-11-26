@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="<%= typeof lang !== 'undefined' ? lang : 'ru' %>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход | Hysteria Panel</title>
+    <title><%= typeof t !== 'undefined' ? t('auth.loginTitle') : 'Вход' %> | Hysteria Panel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
@@ -14,7 +14,13 @@
             <div class="login-header">
                 <span class="logo-icon large">⚡</span>
                 <h1>Hysteria Panel</h1>
-                <p>Управление Hysteria 2 нодами</p>
+                <p><%= typeof t !== 'undefined' && typeof lang !== 'undefined' && lang === 'en' ? 'Hysteria 2 Node Management' : 'Управление Hysteria 2 нодами' %></p>
+            </div>
+            
+            <!-- Language Switcher -->
+            <div class="login-lang-switcher">
+                <a href="?lang=ru" class="lang-btn <%= typeof lang !== 'undefined' && lang === 'ru' ? 'active' : '' %>">RU</a>
+                <a href="?lang=en" class="lang-btn <%= typeof lang !== 'undefined' && lang === 'en' ? 'active' : '' %>">EN</a>
             </div>
             
             <% if (error) { %>
@@ -23,19 +29,45 @@
             
             <form method="POST" action="/panel/login" class="login-form">
                 <div class="form-group">
-                    <label for="username">Логин</label>
+                    <label for="username"><%= typeof t !== 'undefined' ? t('auth.login') : 'Логин' %></label>
                     <input type="text" id="username" name="username" 
-                           placeholder="Введите логин" required autofocus>
+                           placeholder="<%= typeof t !== 'undefined' && typeof lang !== 'undefined' && lang === 'en' ? 'Enter login' : 'Введите логин' %>" required autofocus>
                 </div>
                 <div class="form-group">
-                    <label for="password">Пароль</label>
+                    <label for="password"><%= typeof t !== 'undefined' ? t('auth.password') : 'Пароль' %></label>
                     <input type="password" id="password" name="password" 
-                           placeholder="Введите пароль" required>
+                           placeholder="<%= typeof t !== 'undefined' && typeof lang !== 'undefined' && lang === 'en' ? 'Enter password' : 'Введите пароль' %>" required>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block">Войти</button>
+                <button type="submit" class="btn btn-primary btn-block"><%= typeof t !== 'undefined' ? t('auth.loginButton') : 'Войти' %></button>
             </form>
         </div>
     </div>
+    
+    <style>
+    .login-lang-switcher {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    .login-lang-switcher .lang-btn {
+        padding: 6px 16px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-decoration: none;
+        border-radius: 6px;
+        background: var(--bg-tertiary);
+        transition: 0.15s ease;
+    }
+    .login-lang-switcher .lang-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+    .login-lang-switcher .lang-btn.active {
+        color: var(--text-primary);
+        background: var(--accent);
+    }
+    </style>
 </body>
 </html>
-
