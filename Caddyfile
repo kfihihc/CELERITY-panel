@@ -1,0 +1,9 @@
+{$PANEL_DOMAIN} {
+    tls {$ACME_EMAIL}
+    
+    reverse_proxy backend:3000 {
+        # WebSocket для SSH терминала
+        header_up X-Forwarded-Proto https
+    }
+}
+

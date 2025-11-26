@@ -39,14 +39,14 @@
                 </div>
             </div>
             
-            <div class="form-group">
-                <label for="domain">Домен (для SNI)</label>
-                <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>" 
-                       placeholder="de.example.com">
-                <small>Опционально. Используется для TLS и в подписке</small>
-            </div>
-            
-            <div class="form-group">
+                <div class="form-group">
+                    <label for="domain">Домен (для SNI)</label>
+                    <input type="text" id="domain" name="domain" value="<%= node?.domain || '' %>" 
+                           placeholder="de.example.com">
+                    <small>Опционально. Используется для TLS и в подписке</small>
+                </div>
+                
+                <div class="form-group">
                 <label>Группы серверов</label>
                 <div class="groups-select">
                     <% if (groups && groups.length > 0) { %>

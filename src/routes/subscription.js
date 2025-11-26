@@ -92,7 +92,7 @@ async function getActiveNodes(user) {
         });
         logger.debug(`[Sub] Load balancing applied`);
     } else {
-        nodes.sort((a, b) => (a.rankingCoefficient || 1) - (b.rankingCoefficient || 1));
+    nodes.sort((a, b) => (a.rankingCoefficient || 1) - (b.rankingCoefficient || 1));
     }
     
     return nodes;

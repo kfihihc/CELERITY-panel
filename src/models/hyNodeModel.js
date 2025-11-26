@@ -150,7 +150,7 @@ const hyNodeSchema = new mongoose.Schema({
     customConfig: {
         type: String,
         default: '',
-    },
+        },
     
     // Использовать кастомный конфиг
     useCustomConfig: {

@@ -64,7 +64,7 @@ class SyncService {
                 if (node.useCustomConfig) {
                     logger.warn(`[Sync] Кастомный конфиг для ${node.name} пуст или слишком короткий, используется автогенерация`);
                 }
-                const authUrl = this.getAuthUrl();
+            const authUrl = this.getAuthUrl();
                 configContent = configGenerator.generateNodeConfig(node, authUrl);
             }
             

@@ -93,7 +93,7 @@
                         %>
                         <div class="traffic-info">
                             <span class="traffic-used"><%= used.toFixed(1) %> GB</span>
-                            <% if (limit > 0) { %>
+                        <% if (limit > 0) { %>
                             <div class="traffic-bar">
                                 <div class="traffic-fill" style="width: <%= percent %>%"></div>
                             </div>
@@ -190,7 +190,7 @@ function applyFilters() {
     if (group) params.set('group', group);
     
     location.href = '/panel/users?' + params.toString();
-}
+    }
 
 // Toggle user (optimistic update)
 async function toggleUser(userId, enabled) {
@@ -198,8 +198,8 @@ async function toggleUser(userId, enabled) {
     const toggle = row.querySelector('.toggle-switch input');
     
     try {
-        const res = await fetch(`/api/users/${userId}/${enabled ? 'enable' : 'disable'}`, {
-            method: 'POST',
+    const res = await fetch(`/api/users/${userId}/${enabled ? 'enable' : 'disable'}`, {
+        method: 'POST',
             credentials: 'include'
         });
         

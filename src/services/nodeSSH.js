@@ -218,7 +218,7 @@ class NodeSSH {
             
             if (isActive) {
                 logger.info(`[SSH] Hysteria перезапущен и работает на ${this.node.name}`);
-                return true;
+            return true;
             } else {
                 // Попробуем получить логи для диагностики
                 const logsResult = await this.exec('journalctl -u hysteria-server -n 10 --no-pager 2>/dev/null || journalctl -u hysteria -n 10 --no-pager 2>/dev/null');

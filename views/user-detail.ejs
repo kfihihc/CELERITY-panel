@@ -176,9 +176,9 @@ function copySubscription() {
     navigator.clipboard.writeText(link).then(() => {
         alert('Ссылка скопирована!');
     }).catch(() => {
-        document.getElementById('subLink').select();
-        document.execCommand('copy');
-        alert('Ссылка скопирована!');
+    document.getElementById('subLink').select();
+    document.execCommand('copy');
+    alert('Ссылка скопирована!');
     });
 }
 

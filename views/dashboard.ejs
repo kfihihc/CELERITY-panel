@@ -39,33 +39,33 @@
 <div class="dashboard-grid">
     <div class="dashboard-main">
         <!-- Nodes Status -->
-        <div class="card">
-            <div class="card-header">
-                <h2>Статус нод</h2>
+<div class="card">
+    <div class="card-header">
+        <h2>Статус нод</h2>
                 <div class="header-actions">
                     <button class="btn btn-sm" onclick="refreshStats()" title="Обновить">🔄</button>
                 </div>
-            </div>
+    </div>
             <div class="card-body no-padding">
                 <table class="table nodes-table">
-                    <thead>
-                        <tr>
+            <thead>
+                <tr>
                             <th>Нода</th>
-                            <th>Статус</th>
-                            <th>Онлайн</th>
+                    <th>Статус</th>
+                    <th>Онлайн</th>
                             <th>Загрузка</th>
                             <th>Действия</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% if (nodes.length === 0) { %>
-                        <tr>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (nodes.length === 0) { %>
+                <tr>
                             <td colspan="5" class="text-center text-muted">
                                 <a href="/panel/nodes/add" class="btn btn-primary btn-sm mt-2">Добавить ноду</a>
                             </td>
-                        </tr>
-                        <% } %>
-                        <% nodes.forEach(node => { %>
+                </tr>
+                <% } %>
+                <% nodes.forEach(node => { %>
                         <tr class="node-row" data-nodeid="<%= node._id %>">
                             <td>
                                 <div class="node-cell">
@@ -73,12 +73,12 @@
                                     <code class="node-ip"><%= node.ip %></code>
                                 </div>
                             </td>
-                            <td>
+                    <td>
                                 <span class="status-indicator status-<%= node.status %>">
                                     <span class="status-dot"></span>
-                                    <%= node.status %>
-                                </span>
-                            </td>
+                            <%= node.status %>
+                        </span>
+                    </td>
                             <td class="online-count"><%= node.onlineUsers || 0 %></td>
                             <td class="node-load" data-nodeid="<%= node._id %>">
                                 <span class="load-placeholder">—</span>
@@ -90,12 +90,12 @@
                                     <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="Терминал">💻</a>
                                 </div>
                             </td>
-                        </tr>
-                        <% }); %>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                </tr>
+                <% }); %>
+            </tbody>
+        </table>
+    </div>
+</div>
 
         <!-- Logs -->
         <div class="card mt-2">

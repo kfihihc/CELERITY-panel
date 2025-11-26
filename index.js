@@ -232,82 +232,78 @@ async function startServer() {
         await mongoose.connect(config.MONGO_URI);
         logger.info('✅ Подключено к MongoDB');
         
-        logger.info(`🔒 Запуск HTTPS сервера для ${config.PANEL_DOMAIN}`);
+        const PORT = process.env.PORT || 3000;
+        const useCaddy = process.env.USE_CADDY === 'true';
         
-        const Greenlock = require('@root/greenlock-express');
-        const greenlockDir = path.join(__dirname, 'greenlock.d');
-        
-        // Создаём папки для сертификатов если их нет
-        const livePath = path.join(greenlockDir, 'live', config.PANEL_DOMAIN);
-        if (!fs.existsSync(livePath)) {
-            fs.mkdirSync(livePath, { recursive: true });
-            logger.info(`📁 Создана папка для сертификатов: ${livePath}`);
-        }
-        
-        // Проверяем/добавляем сайт в конфиг Greenlock
-        const configPath = path.join(greenlockDir, 'config.json');
-        try {
-            const glConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            const siteExists = glConfig.sites.some(s => s.subject === config.PANEL_DOMAIN);
-            
-            if (!siteExists) {
-                glConfig.sites.push({
-                    subject: config.PANEL_DOMAIN,
-                    altnames: [config.PANEL_DOMAIN],
-                });
-            }
-            glConfig.defaults.subscriberEmail = config.ACME_EMAIL;
-            glConfig.defaults.store = {
-                module: 'greenlock-store-fs',
-                basePath: greenlockDir,
-            };
-            fs.writeFileSync(configPath, JSON.stringify(glConfig, null, 2));
-            logger.info(`✅ Greenlock config обновлён, store: ${greenlockDir}`);
-        } catch (err) {
-            logger.warn(`⚠️ Не удалось обновить greenlock.d/config.json: ${err.message}`);
-        }
-        
-        const glInstance = Greenlock.init({
-            packageRoot: __dirname,
-            configDir: greenlockDir,
-            maintainerEmail: config.ACME_EMAIL,
-            cluster: false,
-            staging: false, // true для тестов (не тратит rate limit)
-        });
-        
-        // Логируем события сертификатов
-        glInstance.on && glInstance.on('cert_issue', (info) => {
-            logger.info(`🔐 Сертификат выдан для: ${info.subject}`);
-        });
-        
-        glInstance.on && glInstance.on('cert_renewal', (info) => {
-            logger.info(`🔄 Сертификат обновлён для: ${info.subject}`);
-        });
-        
-        glInstance.ready((glx) => {
-            // HTTP -> HTTPS redirect + ACME challenge
-            const httpServer = glx.httpServer();
-            httpServer.listen(80, () => {
-                logger.info('✅ HTTP сервер на порту 80 (redirect to HTTPS)');
-            });
-            
-            // HTTPS сервер
-            const httpsServer = glx.httpsServer(null, app);
+        if (useCaddy) {
+            // За Caddy reverse proxy — просто HTTP сервер
+            const http = require('http');
+            const server = http.createServer(app);
             
             // WebSocket для SSH терминала
-            setupWebSocketServer(httpsServer);
+            setupWebSocketServer(server);
             
-            httpsServer.listen(443, () => {
-                logger.info('✅ HTTPS сервер на порту 443');
+            server.listen(PORT, () => {
+                logger.info(`✅ HTTP сервер на порту ${PORT} (за Caddy)`);
                 logger.info(`🌐 Панель: https://${config.PANEL_DOMAIN}/panel`);
-                
-                // Проверяем что сертификаты сохранились
-                const certPath = path.join(greenlockDir, 'live', config.PANEL_DOMAIN, 'cert.pem');
-                if (fs.existsSync(certPath)) {
-                    logger.info(`✅ Сертификат сохранён: ${certPath}`);
-                }
             });
-        });
+        } else {
+            // Standalone с Greenlock (для локальной разработки)
+            logger.info(`🔒 Запуск HTTPS сервера для ${config.PANEL_DOMAIN}`);
+            
+            const Greenlock = require('@root/greenlock-express');
+            const greenlockDir = path.join(__dirname, 'greenlock.d');
+            
+            // Создаём папки для сертификатов если их нет
+            const livePath = path.join(greenlockDir, 'live', config.PANEL_DOMAIN);
+            if (!fs.existsSync(livePath)) {
+                fs.mkdirSync(livePath, { recursive: true });
+            }
+            
+            const configPath = path.join(greenlockDir, 'config.json');
+            try {
+                const glConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                const siteExists = glConfig.sites.some(s => s.subject === config.PANEL_DOMAIN);
+                
+                if (!siteExists) {
+                    glConfig.sites.push({
+                        subject: config.PANEL_DOMAIN,
+                        altnames: [config.PANEL_DOMAIN],
+                    });
+                }
+                glConfig.defaults.subscriberEmail = config.ACME_EMAIL;
+                glConfig.defaults.store = {
+                    module: 'greenlock-store-fs',
+                    basePath: greenlockDir,
+                };
+                fs.writeFileSync(configPath, JSON.stringify(glConfig, null, 2));
+            } catch (err) {
+                logger.warn(`⚠️ Greenlock config: ${err.message}`);
+            }
+            
+            const glInstance = Greenlock.init({
+                packageRoot: __dirname,
+                configDir: greenlockDir,
+                maintainerEmail: config.ACME_EMAIL,
+                cluster: false,
+                staging: false,
+            });
+            
+            glInstance.ready((glx) => {
+                const httpServer = glx.httpServer();
+                httpServer.listen(80, () => {
+                    logger.info('✅ HTTP сервер на порту 80');
+                });
+                
+                const httpsServer = glx.httpsServer(null, app);
+                setupWebSocketServer(httpsServer);
+                
+                httpsServer.listen(443, () => {
+                    logger.info('✅ HTTPS сервер на порту 443');
+                    logger.info(`🌐 Панель: https://${config.PANEL_DOMAIN}/panel`);
+                });
+            });
+        }
         
         // Cron задачи
         setupCronJobs();
