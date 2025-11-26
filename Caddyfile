@@ -1,14 +1,8 @@
 {$PANEL_DOMAIN} {
-    tls {$ACME_EMAIL}
-    
     reverse_proxy backend:3000 {
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-        
-        # WebSocket support
+        # Force HTTP/1.1 to backend (Express doesn't support h2c)
         transport http {
-            versions h2c 1.1
+            versions 1.1
         }
     }
 }
