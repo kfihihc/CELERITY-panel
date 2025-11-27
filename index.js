@@ -143,7 +143,19 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
-// Подписки - единый роут /api/files/:token
+// Rate limiter для подписок (защита от перебора токенов)
+const subscriptionLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 минута
+    max: 100, // 100 запросов/мин на IP
+    handler: (req, res) => {
+        logger.warn(`[Sub] Rate limit: ${req.ip}`);
+        res.status(429).type('text/plain').send('# Too many requests');
+    },
+});
+
+// Подписки - единый роут /api/files/:token (с rate limit)
+app.use('/api/files', subscriptionLimiter);
+app.use('/api/info', subscriptionLimiter);
 app.use('/api', subscriptionRoutes);
 
 // API роуты (с авторизацией через сессию)
