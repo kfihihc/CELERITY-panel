@@ -1127,6 +1127,19 @@ body {
 .mb-1 { margin-bottom: 8px; }
 .hint { font-size: 13px; color: var(--text-muted); }
 
+/* Settings grid */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+.settings-grid .form-group {
+    margin-bottom: 0;
+}
+.settings-grid input[type="number"] {
+    width: 100%;
+}
+
 /* Alerts */
 .alert {
     padding: 16px 20px;

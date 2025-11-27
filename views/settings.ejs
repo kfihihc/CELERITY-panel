@@ -31,12 +31,13 @@
         
         <div class="card mt-2">
             <div class="card-header">
-                <h2>⚙️ Настройки подписок</h2>
+                <h2>⚙️ Настройки системы</h2>
             </div>
             <div class="card-body">
                 <form method="POST" action="/panel/settings">
+                    
                     <h4 style="margin-bottom: 0.75rem;">⚖️ Балансировка нагрузки</h4>
-                    <div class="settings-list" style="margin-bottom: 1rem;">
+                    <div class="settings-list" style="margin-bottom: 1.5rem;">
                         <label class="checkbox-label">
                             <input type="checkbox" name="loadBalancing.enabled" 
                                    <%= settings?.loadBalancing?.enabled ? 'checked' : '' %>>
@@ -56,7 +57,52 @@
                         </small>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                    <hr style="margin: 1rem 0; border-color: var(--border);">
+                    
+                    <h4 style="margin-bottom: 0.75rem;">🚀 Кэширование (Redis)</h4>
+                    <div class="settings-grid" style="margin-bottom: 1rem;">
+                        <div class="form-group">
+                            <label for="cache.subscriptionTTL">Подписки (сек)</label>
+                            <input type="number" name="cache.subscriptionTTL" id="cache.subscriptionTTL" 
+                                   value="<%= settings?.cache?.subscriptionTTL || 3600 %>" min="60" max="86400">
+                            <small class="hint">Готовые конфиги. Сбрасывается при изменении нод</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cache.userTTL">Пользователи (сек)</label>
+                            <input type="number" name="cache.userTTL" id="cache.userTTL" 
+                                   value="<%= settings?.cache?.userTTL || 900 %>" min="60" max="3600">
+                            <small class="hint">Авторизация. Сбрасывается при отключении</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cache.onlineSessionsTTL">Онлайн-сессии (сек)</label>
+                            <input type="number" name="cache.onlineSessionsTTL" id="cache.onlineSessionsTTL" 
+                                   value="<%= settings?.cache?.onlineSessionsTTL || 10 %>" min="5" max="60">
+                            <small class="hint">Для лимита устройств. Меньше = точнее</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cache.activeNodesTTL">Активные ноды (сек)</label>
+                            <input type="number" name="cache.activeNodesTTL" id="cache.activeNodesTTL" 
+                                   value="<%= settings?.cache?.activeNodesTTL || 30 %>" min="10" max="300">
+                            <small class="hint">Быстрее реакция на изменения нод</small>
+                        </div>
+                    </div>
+                    
+                    <hr style="margin: 1rem 0; border-color: var(--border);">
+                    
+                    <h4 style="margin-bottom: 0.75rem;">🛡️ Rate Limiting</h4>
+                    <div class="settings-grid" style="margin-bottom: 1rem;">
+                        <div class="form-group">
+                            <label for="rateLimit.subscriptionPerMinute">Подписки/мин на IP</label>
+                            <input type="number" name="rateLimit.subscriptionPerMinute" id="rateLimit.subscriptionPerMinute" 
+                                   value="<%= settings?.rateLimit?.subscriptionPerMinute || 100 %>" min="10" max="1000">
+                            <small class="hint">Защита от перебора токенов. Норма: 60-100</small>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">💾 Сохранить все настройки</button>
                 </form>
             </div>
         </div>

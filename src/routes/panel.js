@@ -786,16 +786,25 @@ router.get('/settings', requireAuth, async (req, res) => {
 router.post('/settings', requireAuth, async (req, res) => {
     try {
         const { invalidateSettingsCache } = require('../utils/helpers');
+        const { reloadSettings } = require('../../index');
         
         const updates = {
             'loadBalancing.enabled': req.body['loadBalancing.enabled'] === 'on',
             'loadBalancing.hideOverloaded': req.body['loadBalancing.hideOverloaded'] === 'on',
+            // TTL кэша
+            'cache.subscriptionTTL': parseInt(req.body['cache.subscriptionTTL']) || 3600,
+            'cache.userTTL': parseInt(req.body['cache.userTTL']) || 900,
+            'cache.onlineSessionsTTL': parseInt(req.body['cache.onlineSessionsTTL']) || 10,
+            'cache.activeNodesTTL': parseInt(req.body['cache.activeNodesTTL']) || 30,
+            // Rate limits
+            'rateLimit.subscriptionPerMinute': parseInt(req.body['rateLimit.subscriptionPerMinute']) || 100,
         };
         
         await Settings.update(updates);
         
-        // Сбрасываем кэш настроек
+        // Сбрасываем кэш настроек и перезагружаем в память
         invalidateSettingsCache();
+        await reloadSettings();
         
         logger.info(`[Panel] Настройки обновлены`);
         

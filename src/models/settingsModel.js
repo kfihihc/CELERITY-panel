@@ -20,6 +20,26 @@ const settingsSchema = new mongoose.Schema({
         hideOverloaded: { type: Boolean, default: false },
     },
     
+    // TTL кэша (в секундах)
+    cache: {
+        // Подписки (готовые конфиги Clash/Singbox/URI)
+        subscriptionTTL: { type: Number, default: 3600 },    // 1 час
+        // Данные пользователей (для авторизации подключений)
+        userTTL: { type: Number, default: 900 },             // 15 минут
+        // Онлайн-сессии (для лимита устройств)
+        onlineSessionsTTL: { type: Number, default: 10 },    // 10 секунд
+        // Список активных нод
+        activeNodesTTL: { type: Number, default: 30 },       // 30 секунд
+    },
+    
+    // Rate limiting
+    rateLimit: {
+        // Лимит запросов подписок в минуту (на IP)
+        subscriptionPerMinute: { type: Number, default: 100 },
+        // Лимит запросов авторизации в секунду (на IP ноды)
+        authPerSecond: { type: Number, default: 200 },
+    },
+    
 }, { timestamps: true });
 
 // Статический метод: получить настройки (создаёт если нет)

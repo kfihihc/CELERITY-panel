@@ -2,22 +2,24 @@
  * Сервис кэширования (Redis)
  * 
  * Кэширует:
- * - Подписки пользователей (TTL: 1 час)
- * - Данные пользователей (TTL: 5 минут)
- * - Онлайн-сессии (TTL: 10 секунд)
- * - Активные ноды (TTL: 30 секунд)
+ * - Подписки пользователей
+ * - Данные пользователей (для авторизации)
+ * - Онлайн-сессии (для лимита устройств)
+ * - Активные ноды
+ * 
+ * TTL настраивается через панель управления
  */
 
 const Redis = require('ioredis');
 const logger = require('../utils/logger');
 
-// TTL в секундах
-const TTL = {
+// TTL по умолчанию (в секундах) - используются если настройки не загружены
+const DEFAULT_TTL = {
     SUBSCRIPTION: 3600,      // 1 час
-    USER: 300,               // 5 минут
+    USER: 900,               // 15 минут
     ONLINE_SESSIONS: 10,     // 10 секунд
     ACTIVE_NODES: 30,        // 30 секунд
-    SETTINGS: 60,            // 1 минута
+    SETTINGS: 60,            // 1 минута (фиксированный)
 };
 
 // Префиксы ключей
@@ -33,6 +35,26 @@ class CacheService {
     constructor() {
         this.redis = null;
         this.connected = false;
+        // Динамические TTL из настроек панели
+        this.ttl = { ...DEFAULT_TTL };
+    }
+    
+    /**
+     * Обновить TTL из настроек панели
+     * Вызывается при старте и при изменении настроек
+     */
+    updateTTL(settings) {
+        if (!settings?.cache) return;
+        
+        const c = settings.cache;
+        this.ttl = {
+            SUBSCRIPTION: c.subscriptionTTL || DEFAULT_TTL.SUBSCRIPTION,
+            USER: c.userTTL || DEFAULT_TTL.USER,
+            ONLINE_SESSIONS: c.onlineSessionsTTL || DEFAULT_TTL.ONLINE_SESSIONS,
+            ACTIVE_NODES: c.activeNodesTTL || DEFAULT_TTL.ACTIVE_NODES,
+            SETTINGS: DEFAULT_TTL.SETTINGS, // Всегда фиксированный
+        };
+        logger.info(`[Cache] TTL обновлены: sub=${this.ttl.SUBSCRIPTION}s, user=${this.ttl.USER}s`);
     }
 
     /**
@@ -108,7 +130,7 @@ class CacheService {
         
         try {
             const key = `${PREFIX.SUB}${token}:${format}`;
-            await this.redis.setex(key, TTL.SUBSCRIPTION, JSON.stringify(data));
+            await this.redis.setex(key, this.ttl.SUBSCRIPTION, JSON.stringify(data));
             logger.debug(`[Cache] SET subscription: ${token}:${format}`);
         } catch (err) {
             logger.error(`[Cache] Ошибка setSubscription: ${err.message}`);
@@ -185,7 +207,7 @@ class CacheService {
             const safeData = { ...userData };
             if (safeData.password) delete safeData.password;
             
-            await this.redis.setex(key, TTL.USER, JSON.stringify(safeData));
+            await this.redis.setex(key, this.ttl.USER, JSON.stringify(safeData));
             logger.debug(`[Cache] SET user: ${userId}`);
         } catch (err) {
             logger.error(`[Cache] Ошибка setUser: ${err.message}`);
@@ -234,7 +256,7 @@ class CacheService {
         if (!this.isConnected()) return;
         
         try {
-            await this.redis.setex(PREFIX.ONLINE, TTL.ONLINE_SESSIONS, JSON.stringify(data));
+            await this.redis.setex(PREFIX.ONLINE, this.ttl.ONLINE_SESSIONS, JSON.stringify(data));
         } catch (err) {
             logger.error(`[Cache] Ошибка setOnlineSessions: ${err.message}`);
         }
@@ -268,7 +290,7 @@ class CacheService {
         if (!this.isConnected()) return;
         
         try {
-            await this.redis.setex(PREFIX.NODES, TTL.ACTIVE_NODES, JSON.stringify(nodes));
+            await this.redis.setex(PREFIX.NODES, this.ttl.ACTIVE_NODES, JSON.stringify(nodes));
             logger.debug('[Cache] SET active nodes');
         } catch (err) {
             logger.error(`[Cache] Ошибка setActiveNodes: ${err.message}`);
@@ -316,7 +338,7 @@ class CacheService {
         if (!this.isConnected()) return;
         
         try {
-            await this.redis.setex(PREFIX.SETTINGS, TTL.SETTINGS, JSON.stringify(settings));
+            await this.redis.setex(PREFIX.SETTINGS, this.ttl.SETTINGS, JSON.stringify(settings));
         } catch (err) {
             logger.error(`[Cache] Ошибка setSettings: ${err.message}`);
         }

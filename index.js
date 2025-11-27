@@ -143,15 +143,38 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
+// Глобальные настройки rate limit (обновляются при старте и изменении настроек)
+const rateLimitSettings = {
+    subscriptionPerMinute: 100,
+    authPerSecond: 200,
+};
+
 // Rate limiter для подписок (защита от перебора токенов)
 const subscriptionLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 минута
-    max: 100, // 100 запросов/мин на IP
+    max: () => rateLimitSettings.subscriptionPerMinute,
     handler: (req, res) => {
         logger.warn(`[Sub] Rate limit: ${req.ip}`);
         res.status(429).type('text/plain').send('# Too many requests');
     },
 });
+
+// Функция обновления настроек (экспортируется для panel.js)
+async function reloadSettings() {
+    const Settings = require('./src/models/settingsModel');
+    const settings = await Settings.get();
+    
+    // Обновляем TTL кэша
+    cacheService.updateTTL(settings);
+    
+    // Обновляем rate limits
+    if (settings.rateLimit) {
+        rateLimitSettings.subscriptionPerMinute = settings.rateLimit.subscriptionPerMinute || 100;
+        rateLimitSettings.authPerSecond = settings.rateLimit.authPerSecond || 200;
+        logger.info(`[Settings] Rate limits: sub=${rateLimitSettings.subscriptionPerMinute}/min`);
+    }
+}
+module.exports = { reloadSettings };
 
 // Подписки - единый роут /api/files/:token (с rate limit)
 app.use('/api/files', subscriptionLimiter);
@@ -264,6 +287,9 @@ async function startServer() {
         
         // Подключение к Redis
         await cacheService.connect();
+        
+        // Загрузка настроек (TTL кэша, rate limits)
+        await reloadSettings();
         
         const PORT = process.env.PORT || 3000;
         const useCaddy = process.env.USE_CADDY === 'true';
