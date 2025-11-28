@@ -49,6 +49,7 @@
                 </div>
     </div>
             <div class="card-body no-padding">
+                <!-- Desktop Table -->
                 <div class="table-wrapper">
                 <table class="table nodes-table">
             <thead>
@@ -101,6 +102,54 @@
                 <% }); %>
             </tbody>
         </table>
+                </div>
+                
+                <!-- Mobile Cards -->
+                <div class="mobile-nodes-list">
+                    <% if (nodes.length === 0) { %>
+                        <div style="text-align: center; padding: 40px 20px;">
+                            <p style="color: var(--text-muted); margin-bottom: 16px;">Нет нод</p>
+                            <a href="/panel/nodes/add" class="btn btn-primary btn-sm">Добавить ноду</a>
+                        </div>
+                    <% } %>
+                    <% nodes.forEach(node => { %>
+                        <div class="mobile-node-card" data-nodeid="<%= node._id %>">
+                            <div class="mobile-node-header">
+                                <div class="mobile-node-title">
+                                    <strong><%= node.name %></strong>
+                                    <code><%= node.ip %></code>
+                                </div>
+                                <span class="status-indicator status-<%= node.status %>">
+                                    <span class="status-dot"></span>
+                                </span>
+                            </div>
+                            
+                            <div class="mobile-node-stats">
+                                <div class="mobile-stat-item">
+                                    <span class="mobile-stat-label">Онлайн</span>
+                                    <span class="mobile-stat-value online-count"><%= node.onlineUsers || 0 %></span>
+                                </div>
+                                <div class="mobile-stat-item">
+                                    <span class="mobile-stat-label">Статус</span>
+                                    <span class="mobile-stat-value"><%= node.status %></span>
+                                </div>
+                                <div class="mobile-stat-item node-load-mobile" data-nodeid="<%= node._id %>">
+                                    <span class="mobile-stat-label">Загрузка</span>
+                                    <span class="mobile-stat-value load-placeholder">—</span>
+                                </div>
+                                <div class="mobile-stat-item node-speed-mobile" data-nodeid="<%= node._id %>">
+                                    <span class="mobile-stat-label">Скорость</span>
+                                    <span class="mobile-stat-value load-placeholder">—</span>
+                                </div>
+                            </div>
+                            
+                            <div class="mobile-node-actions">
+                                <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" style="flex: 1;">🔄 Restart</button>
+                                <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;">⚙️ Настройки</a>
+                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon">💻</a>
+                            </div>
+                        </div>
+                    <% }); %>
                 </div>
     </div>
 </div>
@@ -298,6 +347,7 @@ async function loadSystemStats() {
 }
 
 async function loadNodesStats() {
+    // Desktop rows
     const nodeRows = document.querySelectorAll('.node-row');
     
     for (const row of nodeRows) {
@@ -329,16 +379,54 @@ async function loadNodesStats() {
             loadCell.innerHTML = '<span class="load-placeholder">—</span>';
         }
     }
+    
+    // Mobile cards
+    const mobileCards = document.querySelectorAll('.node-load-mobile');
+    
+    for (const card of mobileCards) {
+        const nodeId = card.dataset.nodeid;
+        
+        try {
+            const res = await fetch(`/panel/nodes/${nodeId}/stats`, { credentials: 'include' });
+            const data = await res.json();
+            
+            if (data.success) {
+                const cpuPercent = Math.min(Math.round((data.cpu.load1 / data.cpu.cores) * 100), 100);
+                const memPercent = data.mem.percent;
+                
+                let cpuColor = 'var(--text-primary)';
+                if (cpuPercent >= 80) cpuColor = '#ef4444';
+                else if (cpuPercent >= 60) cpuColor = '#f59e0b';
+                
+                card.querySelector('.mobile-stat-value').innerHTML = `
+                    <span style="color: ${cpuColor}">${cpuPercent}%</span> / ${memPercent}%
+                `;
+            } else {
+                card.querySelector('.mobile-stat-value').textContent = 'N/A';
+            }
+        } catch (e) {
+            card.querySelector('.mobile-stat-value').textContent = '—';
+        }
+    }
 }
 
 async function loadNodesSpeed() {
+    // Форматирование скорости
+    const formatSpeed = (bytes) => {
+        const bits = bytes * 8;
+        if (bits < 1000) return `${bits.toFixed(0)} bit/s`;
+        if (bits < 1000 * 1000) return `${(bits / 1000).toFixed(1)} Kbit/s`;
+        if (bits < 1000 * 1000 * 1000) return `${(bits / 1000 / 1000).toFixed(1)} Mbit/s`;
+        return `${(bits / 1000 / 1000 / 1000).toFixed(2)} Gbit/s`;
+    };
+    
+    // Desktop rows
     const nodeRows = document.querySelectorAll('.node-row');
     
     for (const row of nodeRows) {
         const nodeId = row.dataset.nodeid;
         const speedCell = row.querySelector('.node-speed');
         
-        // Показываем индикатор загрузки
         speedCell.innerHTML = '<span class="load-placeholder">⏳</span>';
         
         try {
@@ -346,15 +434,6 @@ async function loadNodesSpeed() {
             const data = await res.json();
             
             if (data.success) {
-                // Форматируем скорость в биты (умножаем байты на 8)
-                const formatSpeed = (bytes) => {
-                    const bits = bytes * 8;
-                    if (bits < 1000) return `${bits.toFixed(0)} bit/s`;
-                    if (bits < 1000 * 1000) return `${(bits / 1000).toFixed(1)} Kbit/s`;
-                    if (bits < 1000 * 1000 * 1000) return `${(bits / 1000 / 1000).toFixed(1)} Mbit/s`;
-                    return `${(bits / 1000 / 1000 / 1000).toFixed(2)} Gbit/s`;
-                };
-                
                 const txSpeed = formatSpeed(data.tx);
                 const rxSpeed = formatSpeed(data.rx);
                 
@@ -367,6 +446,35 @@ async function loadNodesSpeed() {
             }
         } catch (e) {
             speedCell.innerHTML = '<span class="load-placeholder">—</span>';
+        }
+    }
+    
+    // Mobile cards
+    const mobileCards = document.querySelectorAll('.node-speed-mobile');
+    
+    for (const card of mobileCards) {
+        const nodeId = card.dataset.nodeid;
+        const valueEl = card.querySelector('.mobile-stat-value');
+        
+        valueEl.textContent = '⏳';
+        
+        try {
+            const res = await fetch(`/panel/nodes/${nodeId}/speed`, { credentials: 'include' });
+            const data = await res.json();
+            
+            if (data.success) {
+                const txSpeed = formatSpeed(data.tx);
+                const rxSpeed = formatSpeed(data.rx);
+                
+                valueEl.innerHTML = `
+                    <span style="color: #22c55e; font-size: 12px;">↑ ${txSpeed}</span><br>
+                    <span style="color: #3b82f6; font-size: 12px;">↓ ${rxSpeed}</span>
+                `;
+            } else {
+                valueEl.textContent = 'N/A';
+            }
+        } catch (e) {
+            valueEl.textContent = '—';
         }
     }
 }

@@ -1764,41 +1764,128 @@ html {
         width: 100%;
     }
     
-    /* Tables - Mobile Cards */
+    /* Tables - скрываем на мобилках */
     .table-wrapper {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin: 0 -16px;
-        padding: 0 16px;
+        display: none;
     }
     
-    .table {
+    /* Mobile Cards общие */
+    .mobile-nodes-list,
+    .mobile-users-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+    }
+    
+    .mobile-users-list {
+        display: none; /* Покажется только на мобилке */
+    }
+    
+    .mobile-node-card,
+    .mobile-user-card {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 16px;
+        transition: all 0.2s ease;
+    }
+    
+    .mobile-node-card:active,
+    .mobile-user-card:active {
+        transform: scale(0.98);
+        background: var(--bg-hover);
+    }
+    
+    .mobile-node-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        gap: 12px;
+    }
+    
+    .mobile-node-title {
+        flex: 1;
+    }
+    
+    .mobile-node-title strong {
+        font-size: 15px;
+        display: block;
+        margin-bottom: 4px;
+    }
+    
+    .mobile-node-title code {
         font-size: 12px;
-        min-width: 100%;
+        color: var(--text-muted);
     }
     
-    .table th,
-    .table td {
-        padding: 12px 8px;
-        white-space: nowrap;
+    .mobile-node-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
     }
     
-    .table th:first-child,
-    .table td:first-child {
-        padding-left: 12px;
-        position: sticky;
-        left: 0;
-        background: var(--bg-secondary);
-        z-index: 5;
+    .mobile-stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
     }
     
-    .table th:first-child {
-        z-index: 11;
+    .mobile-stat-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .mobile-stat-value {
+        font-size: 14px;
+        font-weight: 500;
+    }
+    
+    .mobile-node-actions {
+        display: flex;
+        gap: 8px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+    
+    /* Desktop tables - показываем */
+    @media (min-width: 769px) {
+        .mobile-nodes-list,
+        .mobile-users-list {
+            display: none;
+        }
+        
+        .table-wrapper {
+            display: block;
+        }
+    }
+    
+    /* Users table адаптация */
+    .users-table-card .table-wrapper {
+        display: none;
+    }
+    
+    .mobile-users-list {
+        display: flex;
+    }
+    
+    @media (min-width: 769px) {
+        .users-table-card .table-wrapper {
+            display: block;
+        }
+        
+        .users-table-card .mobile-users-list {
+            display: none;
+        }
     }
     
     /* Logs Container Mobile */
     .logs-container {
-        max-height: 250px;
+        max-height: 200px;
         font-size: 11px;
     }
     
@@ -1806,6 +1893,7 @@ html {
         padding: 6px 12px;
         word-break: break-word;
         white-space: pre-wrap;
+        font-size: 10px;
     }
     
     /* Buttons */

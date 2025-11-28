@@ -118,6 +118,78 @@
             </tbody>
         </table>
     </div>
+    
+    <!-- Mobile Cards -->
+    <div class="mobile-users-list">
+        <% if (users.length === 0) { %>
+            <div style="text-align: center; padding: 40px 20px;">
+                <p style="color: var(--text-muted); margin-bottom: 16px;">Нет пользователей</p>
+                <a href="/panel/users/add" class="btn btn-primary btn-sm">Создать первого</a>
+            </div>
+        <% } %>
+        <% users.forEach(user => { 
+            const used = ((user.traffic?.tx || 0) + (user.traffic?.rx || 0)) / (1024*1024*1024);
+            const limit = user.trafficLimit ? user.trafficLimit / (1024*1024*1024) : 0;
+            const percent = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+        %>
+            <div class="mobile-user-card" data-userid="<%= user.userId %>">
+                <div class="mobile-node-header">
+                    <div class="mobile-node-title">
+                        <strong><%= user.userId %></strong>
+                        <% if (user.username) { %>
+                            <code style="font-size: 11px; color: var(--text-muted);"><%= user.username %></code>
+                        <% } %>
+                    </div>
+                    <label class="toggle-switch" title="<%= user.enabled ? 'Отключить' : 'Включить' %>">
+                        <input type="checkbox" <%= user.enabled ? 'checked' : '' %> 
+                               onchange="toggleUser('<%= user.userId %>', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                
+                <div class="mobile-node-stats">
+                    <div class="mobile-stat-item">
+                        <span class="mobile-stat-label">Трафик</span>
+                        <span class="mobile-stat-value">
+                            <%= used.toFixed(1) %> GB<% if (limit > 0) { %> / <%= limit.toFixed(0) %><% } else { %> ∞<% } %>
+                        </span>
+                    </div>
+                    <div class="mobile-stat-item">
+                        <span class="mobile-stat-label">Группы</span>
+                        <span class="mobile-stat-value" style="font-size: 12px;">
+                            <% if (user.groups && user.groups.length > 0) { %>
+                                <%= user.groups.length %> групп
+                            <% } else { %>
+                                —
+                            <% } %>
+                        </span>
+                    </div>
+                </div>
+                
+                <% if (user.groups && user.groups.length > 0) { %>
+                <div class="groups-list" style="margin-bottom: 12px;">
+                    <% user.groups.slice(0,3).forEach(group => { %>
+                        <span class="group-tag-sm" style="background: <%= group.color %>20; border-color: <%= group.color %>; color: <%= group.color %>">
+                            <%= group.name %>
+                        </span>
+                    <% }); %>
+                    <% if (user.groups.length > 3) { %>
+                        <span class="group-more">+<%= user.groups.length - 3 %></span>
+                    <% } %>
+                </div>
+                <% } %>
+                
+                <div class="mobile-node-actions">
+                    <button class="btn btn-sm" onclick="copySubscription('<%= user.subscriptionToken || user.userId %>')" style="flex: 1;">
+                        📋 Подписка
+                    </button>
+                    <a href="/panel/users/<%= user.userId %>" class="btn btn-sm" style="flex: 1;">
+                        → Подробнее
+                    </a>
+                </div>
+            </div>
+        <% }); %>
+    </div>
 </div>
 
 <% if (pagination.pages > 1) { %>
