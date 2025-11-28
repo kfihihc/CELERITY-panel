@@ -107,16 +107,33 @@ html {
 
 .logo-icon {
     font-size: 28px;
-    filter: drop-shadow(0 0 8px var(--accent-glow));
+    filter: drop-shadow(0 0 12px var(--accent-glow));
+    animation: pulse 3s infinite;
+}
+
+.logo-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .logo-text {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
+    letter-spacing: 1px;
     background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+}
+
+.logo-sub {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-weight: 400;
 }
 
 .nav-menu {
@@ -1647,12 +1664,20 @@ html {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 18px;
-        font-weight: 700;
     }
     
     .mobile-logo .logo-icon {
         font-size: 24px;
+    }
+    
+    .mobile-logo .logo-text {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
     
     .mobile-status {
