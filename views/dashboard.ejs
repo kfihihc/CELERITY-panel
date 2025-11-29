@@ -31,9 +31,22 @@
             <span class="stat-icon">📊</span>
             <span class="stat-trend">всего</span>
         </div>
-        <div class="stat-value"><%= ((stats.traffic?.total || 0) / (1024 * 1024 * 1024)).toFixed(1) %> GB</div>
-        <div class="stat-label" title="↑ <%= ((stats.traffic?.tx || 0) / (1024 * 1024 * 1024)).toFixed(2) %> GB / ↓ <%= ((stats.traffic?.rx || 0) / (1024 * 1024 * 1024)).toFixed(2) %> GB">
-            ↑ <%= ((stats.traffic?.tx || 0) / (1024 * 1024 * 1024)).toFixed(1) %> / ↓ <%= ((stats.traffic?.rx || 0) / (1024 * 1024 * 1024)).toFixed(1) %>
+        <% 
+        const totalGB = (stats.traffic?.total || 0) / (1024 * 1024 * 1024);
+        const txGB = (stats.traffic?.tx || 0) / (1024 * 1024 * 1024);
+        const rxGB = (stats.traffic?.rx || 0) / (1024 * 1024 * 1024);
+        
+        // Форматирование: > 1000 GB = TB
+        const formatTraffic = (gb) => {
+            if (gb >= 1000) {
+                return (gb / 1024).toFixed(2) + ' TB';
+            }
+            return gb.toFixed(1) + ' GB';
+        };
+        %>
+        <div class="stat-value"><%= formatTraffic(totalGB) %></div>
+        <div class="stat-label" title="↑ <%= formatTraffic(txGB) %> / ↓ <%= formatTraffic(rxGB) %>">
+            ↑ <%= formatTraffic(txGB) %> / ↓ <%= formatTraffic(rxGB) %>
         </div>
     </div>
 </div>
