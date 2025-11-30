@@ -136,6 +136,7 @@ class SyncService {
 
     /**
      * Получает статистику трафика с ноды и обновляет пользователей
+     * Использует bulkWrite для оптимизации (99% меньше запросов к MongoDB)
      */
     async collectTrafficStats(node) {
         try {
@@ -156,21 +157,32 @@ class SyncService {
             let nodeTx = 0;
             let nodeRx = 0;
             
-            // Обновляем трафик каждого пользователя
+            // Подготавливаем bulk операции для всех пользователей
+            const bulkOps = [];
+            const now = new Date();
+            
             for (const [userId, traffic] of Object.entries(stats)) {
                 nodeTx += traffic.tx || 0;
                 nodeRx += traffic.rx || 0;
                 
-                await HyUser.updateOne(
-                    { userId },
-                    {
-                        $inc: {
-                            'traffic.tx': traffic.tx || 0,
-                            'traffic.rx': traffic.rx || 0,
-                        },
-                        $set: { 'traffic.lastUpdate': new Date() }
+                bulkOps.push({
+                    updateOne: {
+                        filter: { userId },
+                        update: {
+                            $inc: {
+                                'traffic.tx': traffic.tx || 0,
+                                'traffic.rx': traffic.rx || 0,
+                            },
+                            $set: { 'traffic.lastUpdate': now }
+                        }
                     }
-                );
+                });
+            }
+            
+            // Выполняем bulk update (1 запрос вместо N)
+            if (bulkOps.length > 0) {
+                const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
+                logger.debug(`[Stats] ${node.name}: Bulk updated ${result.modifiedCount}/${bulkOps.length} users`);
             }
             
             // Обновляем трафик ноды
@@ -181,7 +193,7 @@ class SyncService {
                         'traffic.tx': nodeTx,
                         'traffic.rx': nodeRx,
                     },
-                    $set: { 'traffic.lastUpdate': new Date() }
+                    $set: { 'traffic.lastUpdate': now }
                 }
             );
             
