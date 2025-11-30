@@ -107,7 +107,7 @@ async function getUserWithCache(userId) {
     }
     
     // Если кэша нет — запрашиваем из MongoDB
-    const user = await HyUser.findOne({ userId }).populate('groups').lean();
+    const user = await HyUser.findOne({ userId }).populate('groups', 'maxDevices').lean();
     
     if (user) {
         // Сохраняем в Redis (без пароля)

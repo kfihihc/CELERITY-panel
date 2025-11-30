@@ -476,7 +476,6 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             active: req.body.active === 'on',
             useCustomConfig: req.body.useCustomConfig === 'on',
             customConfig: req.body.customConfig || '',
-            countryCode: req.body.countryCode || '',
             flag: req.body.flag || '',
             'ssh.port': parseInt(req.body['ssh.port']) || 22,
             'ssh.username': req.body['ssh.username'] || 'root',

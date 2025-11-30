@@ -41,8 +41,8 @@ async function getUserByToken(token) {
             { userId: token }
         ]
     })
-        .populate('nodes')
-        .populate('groups');
+        .populate('nodes', 'active name status onlineUsers maxOnlineUsers rankingCoefficient domain ip port portRange portConfigs flag')
+        .populate('groups', '_id name subscriptionTitle');
     
     return user;
 }

@@ -238,7 +238,7 @@ class SyncService {
      * Кикает пользователя со всех нод
      */
     async kickUser(userId) {
-        const user = await HyUser.findOne({ userId }).populate('nodes');
+        const user = await HyUser.findOne({ userId }).populate('nodes', 'name ip statsPort statsSecret');
         
         if (!user) {
             return;

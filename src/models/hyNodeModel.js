@@ -19,12 +19,6 @@ const hyNodeSchema = new mongoose.Schema({
         required: true,
     },
     
-    // Код страны (для флага: DE, NL, US и т.д.)
-    countryCode: {
-        type: String,
-        default: '',
-    },
-    
     // Эмодзи флага
     flag: {
         type: String,
