@@ -418,6 +418,16 @@ html {
     color: var(--text-muted);
 }
 
+.table th.sortable {
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.table th.sortable:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
 .table tbody tr {
     transition: all 0.2s ease;
 }

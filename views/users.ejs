@@ -35,10 +35,14 @@
         <table class="table" id="usersTable">
             <thead>
                 <tr>
-                    <th class="th-user">Пользователь</th>
+                    <th class="th-user sortable" onclick="sortBy('userId')" style="cursor: pointer;">
+                        Пользователь <%= getSortIcon('userId') %>
+                    </th>
                     <th class="th-status">Статус</th>
                     <th class="th-groups">Группы</th>
-                    <th class="th-traffic">Трафик</th>
+                    <th class="th-traffic sortable" onclick="sortBy('traffic')" style="cursor: pointer;">
+                        Трафик <%= getSortIcon('traffic') %>
+                    </th>
                     <th class="th-actions">Действия</th>
                 </tr>
             </thead>
@@ -226,8 +230,24 @@
 
 <div id="toast" class="toast"></div>
 
+<%
+// Helper функция для иконки сортировки
+function getSortIcon(field) {
+    const currentSort = query.sortBy || 'createdAt';
+    const currentOrder = query.sortOrder || 'desc';
+    
+    if (currentSort !== field) {
+        return '↕️'; // Не активна сортировка
+    }
+    
+    return currentOrder === 'desc' ? '↓' : '↑';
+}
+%>
+
 <script>
 const baseUrl = '<%= baseUrl %>';
+const currentSortBy = '<%= query.sortBy || "createdAt" %>';
+const currentSortOrder = '<%= query.sortOrder || "desc" %>';
 
 // Debounced search
 let searchTimeout;
@@ -299,5 +319,25 @@ function showToast(message, type = 'success') {
     toast.textContent = message;
     toast.className = 'toast show ' + type;
     setTimeout(() => toast.className = 'toast', 2000);
+}
+
+// Sort by field
+function sortBy(field) {
+    const params = new URLSearchParams(window.location.search);
+    
+    // Если кликнули по текущему полю - меняем направление
+    if (currentSortBy === field) {
+        const newOrder = currentSortOrder === 'desc' ? 'asc' : 'desc';
+        params.set('sortOrder', newOrder);
+    } else {
+        // Новое поле - сортируем по убыванию по умолчанию
+        params.set('sortBy', field);
+        params.set('sortOrder', 'desc');
+    }
+    
+    // Сбрасываем на первую страницу при смене сортировки
+    params.set('page', '1');
+    
+    location.href = '/panel/users?' + params.toString();
 }
 </script>

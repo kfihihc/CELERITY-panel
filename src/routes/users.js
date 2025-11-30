@@ -31,14 +31,72 @@ async function invalidateUserCache(userId, subscriptionToken) {
  */
 router.get('/', async (req, res) => {
     try {
-        const { enabled, group, page = 1, limit = 50 } = req.query;
+        const { enabled, group, page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         
         const filter = {};
         if (enabled !== undefined) filter.enabled = enabled === 'true';
         if (group) filter.groups = group;
         
+        // Определяем поле для сортировки
+        let sortField = {};
+        const order = sortOrder === 'asc' ? 1 : -1;
+        
+        switch (sortBy) {
+            case 'traffic':
+                // Для сортировки по трафику нужно использовать aggregation
+                // так как трафик - это сумма tx + rx
+                const pipeline = [
+                    { $match: filter },
+                    {
+                        $addFields: {
+                            totalTraffic: { $add: ['$traffic.tx', '$traffic.rx'] }
+                        }
+                    },
+                    { $sort: { totalTraffic: order } },
+                    { $skip: (page - 1) * limit },
+                    { $limit: parseInt(limit) }
+                ];
+                
+                const usersAggregated = await HyUser.aggregate(pipeline);
+                
+                // Populate вручную после aggregation
+                const users = await HyUser.populate(usersAggregated, [
+                    { path: 'nodes', select: 'name ip' },
+                    { path: 'groups', select: 'name color' }
+                ]);
+                
+                const total = await HyUser.countDocuments(filter);
+                
+                return res.json({
+                    users,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total,
+                        pages: Math.ceil(total / limit),
+                    }
+                });
+            
+            case 'userId':
+                sortField = { userId: order };
+                break;
+            
+            case 'username':
+                sortField = { username: order };
+                break;
+            
+            case 'enabled':
+                sortField = { enabled: order };
+                break;
+            
+            case 'createdAt':
+            default:
+                sortField = { createdAt: order };
+                break;
+        }
+        
         const users = await HyUser.find(filter)
-            .sort({ createdAt: -1 })
+            .sort(sortField)
             .skip((page - 1) * limit)
             .limit(parseInt(limit))
             .populate('nodes', 'name ip')

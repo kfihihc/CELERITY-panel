@@ -600,10 +600,10 @@ router.get('/nodes/:id/logs', requireAuth, async (req, res) => {
 
 // ==================== USERS ====================
 
-// GET /panel/users - Список пользователей (с поиском)
+// GET /panel/users - Список пользователей (с поиском и сортировкой)
 router.get('/users', requireAuth, async (req, res) => {
     try {
-        const { enabled, group, page = 1, search } = req.query;
+        const { enabled, group, page = 1, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         const limit = 50;
         
         const filter = {};
@@ -619,13 +619,55 @@ router.get('/users', requireAuth, async (req, res) => {
             ];
         }
         
-        const [users, total, groups] = await Promise.all([
-            HyUser.find(filter)
-                .sort({ createdAt: -1 })
+        let users;
+        const order = sortOrder === 'asc' ? 1 : -1;
+        
+        // Если сортировка по трафику - используем aggregation
+        if (sortBy === 'traffic') {
+            const pipeline = [
+                { $match: filter },
+                {
+                    $addFields: {
+                        totalTraffic: { $add: [{ $ifNull: ['$traffic.tx', 0] }, { $ifNull: ['$traffic.rx', 0] }] }
+                    }
+                },
+                { $sort: { totalTraffic: order } },
+                { $skip: (page - 1) * limit },
+                { $limit: limit }
+            ];
+            
+            const usersAggregated = await HyUser.aggregate(pipeline);
+            users = await HyUser.populate(usersAggregated, [
+                { path: 'groups', select: 'name color' }
+            ]);
+        } else {
+            // Обычная сортировка
+            let sortField = {};
+            switch (sortBy) {
+                case 'userId':
+                    sortField = { userId: order };
+                    break;
+                case 'username':
+                    sortField = { username: order };
+                    break;
+                case 'enabled':
+                    sortField = { enabled: order };
+                    break;
+                case 'createdAt':
+                default:
+                    sortField = { createdAt: order };
+                    break;
+            }
+            
+            users = await HyUser.find(filter)
+                .sort(sortField)
                 .skip((page - 1) * limit)
                 .limit(limit)
                 .populate('groups', 'name color')
-                .lean(),
+                .lean();
+        }
+        
+        const [total, groups] = await Promise.all([
             HyUser.countDocuments(filter),
             getActiveGroups(),
         ]);
