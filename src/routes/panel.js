@@ -44,6 +44,12 @@ const os = require('os');
 // Кэш скомпилированных шаблонов (для production)
 const templateCache = new Map();
 
+// Счетчик запросов для RPS (оптимизированный)
+let rpsCounter = 0;
+let rpmCounter = 0;
+let lastRpsReset = Date.now();
+let lastRpmReset = Date.now();
+
 // Rate limiter для защиты от brute-force
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 минут
@@ -125,6 +131,29 @@ const checkIpWhitelist = (req, res, next) => {
 
 // Применяем IP whitelist ко всем роутам панели
 router.use(checkIpWhitelist);
+
+// Middleware: подсчет RPS (оптимизированный - O(1))
+router.use((req, res, next) => {
+    const now = Date.now();
+    
+    // Сброс счетчика RPS каждую секунду
+    if (now - lastRpsReset >= 1000) {
+        rpsCounter = 1;
+        lastRpsReset = now;
+    } else {
+        rpsCounter++;
+    }
+    
+    // Сброс счетчика RPM каждую минуту
+    if (now - lastRpmReset >= 60000) {
+        rpmCounter = 1;
+        lastRpmReset = now;
+    } else {
+        rpmCounter++;
+    }
+    
+    next();
+});
 
 // Middleware: проверка авторизации
 const requireAuth = (req, res, next) => {
@@ -979,6 +1008,47 @@ router.post('/settings/password', requireAuth, async (req, res) => {
     }
 });
 
+// POST /panel/settings/reset-traffic - Сброс счетчика трафика для всех пользователей
+router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
+    try {
+        // Сбрасываем трафик у всех пользователей
+        const result = await HyUser.updateMany(
+            {},
+            {
+                $set: {
+                    'traffic.tx': 0,
+                    'traffic.rx': 0,
+                    'traffic.lastUpdate': new Date()
+                }
+            }
+        );
+        
+        logger.warn(`[Panel] Трафик сброшен для ${result.modifiedCount} пользователей админом: ${req.session.adminUsername}`);
+        
+        // Инвалидируем кэш всех пользователей
+        const users = await HyUser.find({}).select('userId subscriptionToken').lean();
+        for (const user of users) {
+            await cache.invalidateUser(user.userId);
+            if (user.subscriptionToken) {
+                await cache.invalidateSubscription(user.subscriptionToken);
+            }
+        }
+        
+        // Инвалидируем статистику
+        await cache.invalidateDashboardCounts();
+        await cache.invalidateTrafficStats();
+        
+        res.json({ 
+            success: true, 
+            count: result.modifiedCount,
+            message: `Трафик сброшен у ${result.modifiedCount} пользователей`
+        });
+    } catch (error) {
+        logger.error('[Panel] Ошибка сброса трафика:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // POST /panel/nodes/:id/restart - Перезапуск Hysteria на ноде
 router.post('/nodes/:id/restart', requireAuth, async (req, res) => {
     try {
@@ -1018,11 +1088,36 @@ router.get('/system-stats', requireAuth, async (req, res) => {
         const usedMem = totalMem - freeMem;
         const processMemory = process.memoryUsage();
         
+        // CPU в процентах - используем load average (мгновенно, без задержек!)
+        // load1 / cores * 100 = примерный % загрузки
+        const cpuPercent = Math.min(Math.round((loadAvg[0] / cpus.length) * 100), 100);
+        
+        // RPS/RPM из счетчиков (O(1) операция!)
+        const rps = rpsCounter;
+        const rpm = rpmCounter;
+        
+        // Cache stats (Redis быстрый)
+        const cacheStats = await cache.getStats();
+        
+        // Active connections - берем из кеша dashboard (уже есть!)
+        let totalConnections = 0;
+        const dashboardCounts = await cache.getDashboardCounts();
+        if (dashboardCounts) {
+            // Если есть кеш - берем оттуда
+            const nodes = await HyNode.find({ active: true }).select('onlineUsers').lean();
+            totalConnections = nodes.reduce((sum, n) => sum + (n.onlineUsers || 0), 0);
+        } else {
+            // Если нет - быстрый подсчет без aggregate
+            const nodes = await HyNode.find({ active: true }).select('onlineUsers').lean();
+            totalConnections = nodes.reduce((sum, n) => sum + (n.onlineUsers || 0), 0);
+        }
+        
         res.json({
             success: true,
             cpu: {
                 cores: cpus.length,
                 model: cpus[0]?.model || 'Unknown',
+                percent: cpuPercent, // ← NEW!
                 load1: loadAvg[0],
                 load5: loadAvg[1],
                 load15: loadAvg[2],
@@ -1038,6 +1133,12 @@ router.get('/system-stats', requireAuth, async (req, res) => {
                 heapTotal: processMemory.heapTotal,
                 rss: processMemory.rss,
             },
+            requests: {
+                rps: rps,           // ← NEW!
+                rpm: rpm,           // ← NEW!
+            },
+            connections: totalConnections, // ← NEW!
+            cache: cacheStats,              // ← NEW!
             uptime: Math.floor(process.uptime()),
             platform: os.platform(),
             nodeVersion: process.version,

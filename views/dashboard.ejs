@@ -223,8 +223,11 @@
             <div class="card-body">
                 <div class="system-info" id="systemStats">
                     <div class="sys-item">
-                        <span class="sys-label">CPU Load</span>
-                        <span class="sys-value" id="cpuLoad">—</span>
+                        <span class="sys-label">CPU</span>
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar" id="cpuBar" style="width: 0%"></div>
+                        </div>
+                        <span class="sys-value" id="cpuValue">—</span>
                     </div>
                     <div class="sys-item">
                         <span class="sys-label">RAM</span>
@@ -232,6 +235,18 @@
                             <div class="progress-bar" id="ramBar" style="width: 0%"></div>
                         </div>
                         <span class="sys-value" id="ramValue">—</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">RPS</span>
+                        <span class="sys-value" id="rpsValue">—</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">Connections</span>
+                        <span class="sys-value" id="connectionsValue">—</span>
+                    </div>
+                    <div class="sys-item">
+                        <span class="sys-label">Redis Keys</span>
+                        <span class="sys-value" id="cacheValue">—</span>
                     </div>
                     <div class="sys-item">
                         <span class="sys-label">Process</span>
@@ -334,8 +349,12 @@ async function loadSystemStats() {
         const data = await res.json();
         
         if (data.success) {
-            // CPU
-            document.getElementById('cpuLoad').textContent = data.cpu.load1.toFixed(2);
+            // CPU в процентах
+            const cpuPercent = data.cpu.percent || 0;
+            const cpuBar = document.getElementById('cpuBar');
+            cpuBar.style.width = cpuPercent + '%';
+            cpuBar.className = 'progress-bar' + (cpuPercent > 80 ? ' high' : cpuPercent > 60 ? ' medium' : '');
+            document.getElementById('cpuValue').textContent = cpuPercent + '%';
             
             // RAM
             const ramPercent = data.mem.percent;
@@ -343,6 +362,19 @@ async function loadSystemStats() {
             ramBar.style.width = ramPercent + '%';
             ramBar.className = 'progress-bar' + (ramPercent > 80 ? ' high' : ramPercent > 60 ? ' medium' : '');
             document.getElementById('ramValue').textContent = ramPercent + '%';
+            
+            // RPS (Requests Per Second)
+            const rps = data.requests?.rps || 0;
+            const rpm = data.requests?.rpm || 0;
+            document.getElementById('rpsValue').textContent = `${rps}/s (${rpm}/m)`;
+            
+            // Active connections
+            document.getElementById('connectionsValue').textContent = data.connections || 0;
+            
+            // Cache (Redis keys)
+            const cacheKeys = data.cache?.keys || 0;
+            const cacheMem = data.cache?.usedMemoryMB || '0';
+            document.getElementById('cacheValue').textContent = `${cacheKeys} (${cacheMem}MB)`;
             
             // Process memory
             const processMB = Math.round(data.process.rss / 1024 / 1024);

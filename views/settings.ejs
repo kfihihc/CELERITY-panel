@@ -207,6 +207,70 @@ ACME_EMAIL=admin@example.com</pre>
                 </div>
             </div>
         </div>
+        
+        <div class="card mt-2">
+            <div class="card-header">
+                <h2>⚠️ Опасная зона</h2>
+            </div>
+            <div class="card-body">
+                <h4 style="margin-bottom: 0.5rem;">Сброс счетчика трафика</h4>
+                <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 1rem;">
+                    Обнуляет счетчик использованного трафика (tx/rx) для всех пользователей. 
+                    Действие необратимо!
+                </p>
+                <button class="btn btn-danger btn-sm" onclick="resetTraffic()">
+                    🗑️ Сбросить весь трафик
+                </button>
+            </div>
+        </div>
     </div>
 </div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+async function resetTraffic() {
+    if (!confirm('⚠️ ВНИМАНИЕ!\n\nВы уверены что хотите сбросить счетчик трафика для ВСЕХ пользователей?\n\nЭто действие необратимо!')) {
+        return;
+    }
+    
+    // Двойное подтверждение
+    if (!confirm('Последнее подтверждение.\n\nСчетчики tx/rx будут обнулены у всех пользователей.\n\nПродолжить?')) {
+        return;
+    }
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ Сброс...';
+    
+    try {
+        const res = await fetch('/panel/settings/reset-traffic', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast(`✓ Трафик сброшен у ${data.count} пользователей`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast('Ошибка: ' + (data.error || 'unknown'), 'error');
+            btn.disabled = false;
+            btn.textContent = '🗑️ Сбросить весь трафик';
+        }
+    } catch (e) {
+        showToast('Ошибка запроса', 'error');
+        btn.disabled = false;
+        btn.textContent = '🗑️ Сбросить весь трафик';
+    }
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast show ' + type;
+    setTimeout(() => toast.className = 'toast', 3000);
+}
+</script>
 
