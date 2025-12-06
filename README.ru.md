@@ -5,7 +5,8 @@
 [English](README.md) | **[Русский](README.ru.md)**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![Docker Pulls](https://img.shields.io/docker/pulls/clickdevtech/hysteria-panel)](https://hub.docker.com/r/clickdevtech/hysteria-panel)
+[![Docker Image Size](https://img.shields.io/docker/image-size/clickdevtech/hysteria-panel/latest)](https://hub.docker.com/r/clickdevtech/hysteria-panel)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=white)](package.json)
 [![Hysteria](https://img.shields.io/badge/Hysteria-2.x-9B59B6)](https://v2.hysteria.network/)
 
@@ -18,7 +19,20 @@
 curl -fsSL https://get.docker.com | sh
 ```
 
-**2. Разверните панель:**
+**2. Разверните панель (Docker Hub):**
+```bash
+mkdir hysteria-panel && cd hysteria-panel
+
+# Скачать необходимые файлы
+curl -O https://raw.githubusercontent.com/ClickDevTech/hysteria-panel/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/ClickDevTech/hysteria-panel/main/docker.env.example
+
+cp docker.env.example .env
+nano .env  # Укажите домен, email и секреты
+docker compose up -d
+```
+
+**Альтернатива: сборка из исходников**
 ```bash
 git clone https://github.com/ClickDevTech/hysteria-panel.git
 cd hysteria-panel
@@ -322,7 +336,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
 
   backend:
-    build: .
+    image: clickdevtech/hysteria-panel:latest  # или build: . для разработки
     restart: always
     depends_on:
       - mongo

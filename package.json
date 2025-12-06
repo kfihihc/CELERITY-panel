@@ -2,6 +2,32 @@
   "name": "c3-celerity",
   "version": "1.0.0",
   "description": "C³ CELERITY - Management panel for Hysteria 2 nodes by Click Connect",
+  "keywords": [
+    "nodejs",
+    "docker",
+    "mongodb",
+    "proxy",
+    "self-hosted",
+    "vpn",
+    "hysteria",
+    "vpn-panel",
+    "censorship-resistant",
+    "hysteria2",
+    "proxy-panel"
+  ],
+  "homepage": "https://github.com/ClickDevTech/hysteria-panel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClickDevTech/hysteria-panel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ClickDevTech/hysteria-panel/issues"
+  },
+  "author": "Click Connect",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -36,4 +62,3 @@
     "nodemon": "^3.0.2"
   }
 }
-
