@@ -1,6 +1,6 @@
 /**
- * HTTP Auth эндпоинт для Hysteria 2 нод
- * Ноды отправляют сюда запросы при каждом подключении клиента
+ * HTTP Auth endpoint for Hysteria 2 nodes
+ * Nodes send requests here on each client connection
  */
 
 const express = require('express');
@@ -12,16 +12,12 @@ const { getSettings } = require('../utils/helpers');
 const logger = require('../utils/logger');
 
 /**
- * Извлечь IP из addr (поддержка IPv4 и IPv6)
- * Примеры:
- *   "185.90.103.104:55239" → "185.90.103.104"
- *   "[2001:db8::1]:55239" → "2001:db8::1"
- *   "::ffff:192.168.1.1:55239" → "::ffff:192.168.1.1"
+ * Extract IP from addr (IPv4 and IPv6 support)
  */
 function extractIP(addr) {
     if (!addr) return '';
     
-    // IPv6 с квадратными скобками: [2001:db8::1]:55239
+    // IPv6 with brackets: [2001:db8::1]:55239
     if (addr.startsWith('[')) {
         const endBracket = addr.indexOf(']');
         if (endBracket > 0) {
@@ -29,10 +25,10 @@ function extractIP(addr) {
         }
     }
     
-    // Находим последнее двоеточие
+    // Find last colon
     const lastColon = addr.lastIndexOf(':');
     if (lastColon > 0) {
-        // Проверяем, является ли часть после : портом (только цифры)
+        // Check if part after : is port (digits only)
         const afterColon = addr.substring(lastColon + 1);
         if (/^\d+$/.test(afterColon)) {
             return addr.substring(0, lastColon);
@@ -43,26 +39,17 @@ function extractIP(addr) {
 }
 
 /**
- * Проверить лимит устройств по уникальным IP
- * 
- * @param {string} userId - ID пользователя
- * @param {string} clientIP - IP адрес клиента
- * @param {number} maxDevices - Максимум устройств
- * @returns {Object} { allowed: boolean, activeCount: number }
+ * Check device limit by unique IPs
  */
 async function checkDeviceLimit(userId, clientIP, maxDevices) {
     try {
-        // Получаем настройки grace period
         const settings = await getSettings();
         const gracePeriodMinutes = settings?.deviceGracePeriod ?? 15;
         const gracePeriodMs = gracePeriodMinutes * 60 * 1000;
         
-        // Получаем все IP этого пользователя из Redis
-        // Если Redis недоступен - вернет {} (fallback: лимит не работает корректно)
         const deviceIPs = await cache.getDeviceIPs(userId);
         const now = Date.now();
         
-        // Считаем активные IP (в пределах grace period)
         const activeIPs = new Set();
         for (const [ip, timestamp] of Object.entries(deviceIPs)) {
             if (now - parseInt(timestamp) < gracePeriodMs) {
@@ -70,47 +57,40 @@ async function checkDeviceLimit(userId, clientIP, maxDevices) {
             }
         }
         
-        // Добавляем текущий IP
         activeIPs.add(clientIP);
-        
         const activeCount = activeIPs.size;
         
-        // Проверяем лимит
         if (activeCount > maxDevices) {
             return { allowed: false, activeCount };
         }
         
-        // Разрешено — обновляем timestamp для этого IP
         await cache.updateDeviceIP(userId, clientIP);
         
-        // Периодически чистим старые IP (не при каждом запросе)
-        if (Math.random() < 0.1) { // 10% запросов
+        // Periodically clean old IPs (not on every request)
+        if (Math.random() < 0.1) {
             await cache.cleanupOldDeviceIPs(userId, gracePeriodMs);
         }
         
         return { allowed: true, activeCount };
     } catch (err) {
         logger.error(`[Auth] Device check error: ${err.message}`);
-        // В случае ошибки — разрешаем (fail open)
+        // On error - allow (fail open)
         return { allowed: true, activeCount: 0 };
     }
 }
 
 /**
- * Получить пользователя (с кэшированием)
+ * Get user with caching
  */
 async function getUserWithCache(userId) {
-    // Сначала проверяем Redis кэш
     const cached = await cache.getUser(userId);
     if (cached) {
         return cached;
     }
     
-    // Если кэша нет — запрашиваем из MongoDB
     const user = await HyUser.findOne({ userId }).populate('groups', 'maxDevices').lean();
     
     if (user) {
-        // Сохраняем в Redis (без пароля)
         await cache.setUser(userId, user);
     }
     
@@ -118,20 +98,10 @@ async function getUserWithCache(userId) {
 }
 
 /**
- * POST /auth - Проверка авторизации пользователя
+ * POST /auth - User authorization check
  * 
- * Hysteria отправляет:
- * {
- *   "addr": "IP:port клиента",
- *   "auth": "строка авторизации от клиента",
- *   "tx": bandwidth клиента
- * }
- * 
- * Мы ожидаем auth в формате: "userId:password" или просто "userId"
- * 
- * Ответ:
- * { "ok": true, "id": "userId" } — разрешить
- * { "ok": false } — запретить
+ * Hysteria sends: { "addr": "IP:port", "auth": "userId:password", "tx": bandwidth }
+ * Response: { "ok": true, "id": "userId" } or { "ok": false }
  */
 router.post('/', async (req, res) => {
     try {
@@ -142,7 +112,7 @@ router.post('/', async (req, res) => {
             return res.json({ ok: false });
         }
         
-        // Парсим auth строку: может быть "userId:password" или "userId"
+        // Parse auth string: can be "userId:password" or just "userId"
         let userId, password;
         
         if (auth.includes(':')) {
@@ -152,7 +122,6 @@ router.post('/', async (req, res) => {
             password = null;
         }
         
-        // Ищем пользователя с группами (с кэшированием)
         const user = await getUserWithCache(userId);
         
         if (!user) {
@@ -160,13 +129,11 @@ router.post('/', async (req, res) => {
             return res.json({ ok: false });
         }
         
-        // Проверяем что подписка активна
         if (!user.enabled) {
             logger.warn(`[Auth] Subscription inactive: ${userId} (${addr})`);
             return res.json({ ok: false });
         }
         
-        // Проверяем пароль если указан
         if (password) {
             const expectedPassword = cryptoService.generatePassword(userId);
             if (password !== expectedPassword && password !== user.password) {
@@ -175,7 +142,6 @@ router.post('/', async (req, res) => {
             }
         }
         
-        // Проверяем лимит трафика
         if (user.trafficLimit > 0) {
             const usedTraffic = (user.traffic?.tx || 0) + (user.traffic?.rx || 0);
             if (usedTraffic >= user.trafficLimit) {
@@ -184,16 +150,14 @@ router.post('/', async (req, res) => {
             }
         }
         
-        // Проверяем дату истечения
         if (user.expireAt && new Date(user.expireAt) < new Date()) {
             logger.warn(`[Auth] Subscription expired: ${userId} (${addr})`);
             return res.json({ ok: false });
         }
         
-        // Проверяем лимит устройств
         let maxDevices = user.maxDevices;
         
-        // Если у пользователя 0 - берём минимальный из групп
+        // If user has 0 - use minimum from groups
         if (maxDevices === 0 && user.groups?.length > 0) {
             const groupLimits = user.groups
                 .filter(g => g.maxDevices > 0)
@@ -204,9 +168,8 @@ router.post('/', async (req, res) => {
             }
         }
         
-        // -1 = безлимит, 0 = без ограничений (нет настроек)
+        // -1 = unlimited, 0 = no limit (no settings)
         if (maxDevices > 0) {
-            // Извлекаем IP из addr (поддержка IPv4 и IPv6)
             const clientIP = extractIP(addr);
             
             const { allowed, activeCount } = await checkDeviceLimit(userId, clientIP, maxDevices);
@@ -217,24 +180,14 @@ router.post('/', async (req, res) => {
             }
         }
         
-        logger.debug(`[Auth] ✅ Authorized: ${userId} (${addr})`);
+        logger.debug(`[Auth] Authorized: ${userId} (${addr})`);
         
-        // Успешная авторизация
-        // Bandwidth ограничивается на стороне КЛИЕНТА (в подписке)
-        // или глобально на сервере (bandwidth в config.yaml)
-        return res.json({ 
-            ok: true, 
-            id: userId,
-        });
+        return res.json({ ok: true, id: userId });
         
     } catch (error) {
         logger.error(`[Auth] Error: ${error.message}`);
-        // В случае ошибки — запрещаем (безопаснее)
         return res.json({ ok: false });
     }
 });
-
-// Эндпоинт /check/:userId удалён по соображениям безопасности
-// Для отладки используйте логи или веб-панель
 
 module.exports = router;

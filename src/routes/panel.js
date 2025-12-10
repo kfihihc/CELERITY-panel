@@ -1273,7 +1273,7 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
         if (stdout) logger.info(`[Restore] stdout: ${stdout}`);
         if (stderr) logger.info(`[Restore] stderr: ${stderr}`);
         
-        logger.info(`[Restore] ✅ Database restored`);
+        logger.info(`[Restore] Database restored successfully`);
         
         // Удаляем временные файлы
         fs.unlinkSync(uploadedFile);

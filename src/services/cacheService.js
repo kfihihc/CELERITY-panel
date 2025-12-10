@@ -1,54 +1,54 @@
 /**
- * Сервис кэширования (Redis)
+ * Caching service (Redis)
  * 
- * Кэширует:
- * - Подписки пользователей
- * - Данные пользователей (для авторизации)
- * - Онлайн-сессии (для лимита устройств)
- * - Активные ноды
+ * Caches:
+ * - User subscriptions
+ * - User data (for auth)
+ * - Online sessions (for device limits)
+ * - Active nodes
  * 
- * TTL настраивается через панель управления
+ * TTL is configurable via panel settings
  */
 
 const Redis = require('ioredis');
 const logger = require('../utils/logger');
 
-// TTL по умолчанию (в секундах) - используются если настройки не загружены
+// Default TTL (seconds) - used if settings not loaded
 const DEFAULT_TTL = {
-    SUBSCRIPTION: 3600,      // 1 час
-    USER: 900,               // 15 минут
-    ONLINE_SESSIONS: 10,     // 10 секунд
-    ACTIVE_NODES: 30,        // 30 секунд
-    SETTINGS: 60,            // 1 минута (фиксированный)
-    TRAFFIC_STATS: 300,      // 5 минут
-    GROUPS: 300,             // 5 минут
-    DASHBOARD_COUNTS: 60,    // 1 минута
+    SUBSCRIPTION: 3600,      // 1 hour
+    USER: 900,               // 15 minutes
+    ONLINE_SESSIONS: 10,     // 10 seconds
+    ACTIVE_NODES: 30,        // 30 seconds
+    SETTINGS: 60,            // 1 minute (fixed)
+    TRAFFIC_STATS: 300,      // 5 minutes
+    GROUPS: 300,             // 5 minutes
+    DASHBOARD_COUNTS: 60,    // 1 minute
 };
 
-// Префиксы ключей
+// Key prefixes
 const PREFIX = {
     SUB: 'sub:',             // sub:{token}:{format}
     USER: 'user:',           // user:{userId}
-    DEVICES: 'devices:',     // devices:{userId} - Hash с IP устройств
-    ONLINE: 'online',        // online (хранит все сессии) - legacy
+    DEVICES: 'devices:',     // devices:{userId} - Hash with device IPs
+    ONLINE: 'online',        // online (stores all sessions) - legacy
     NODES: 'nodes:active',   // nodes:active
     SETTINGS: 'settings',    // settings
-    TRAFFIC_STATS: 'traffic:stats', // Общая статистика трафика
-    GROUPS: 'groups:active', // Активные группы
-    DASHBOARD_COUNTS: 'dashboard:counts', // Счётчики для дашборда
+    TRAFFIC_STATS: 'traffic:stats', // Total traffic stats
+    GROUPS: 'groups:active', // Active groups
+    DASHBOARD_COUNTS: 'dashboard:counts', // Dashboard counters
 };
 
 class CacheService {
     constructor() {
         this.redis = null;
         this.connected = false;
-        // Динамические TTL из настроек панели
+        // Dynamic TTL from panel settings
         this.ttl = { ...DEFAULT_TTL };
     }
     
     /**
-     * Обновить TTL из настроек панели
-     * Вызывается при старте и при изменении настроек
+     * Update TTL from panel settings
+     * Called on startup and when settings change
      */
     updateTTL(settings) {
         if (!settings?.cache) return;
@@ -59,16 +59,16 @@ class CacheService {
             USER: c.userTTL || DEFAULT_TTL.USER,
             ONLINE_SESSIONS: c.onlineSessionsTTL || DEFAULT_TTL.ONLINE_SESSIONS,
             ACTIVE_NODES: c.activeNodesTTL || DEFAULT_TTL.ACTIVE_NODES,
-            SETTINGS: DEFAULT_TTL.SETTINGS, // Всегда фиксированный
-            TRAFFIC_STATS: DEFAULT_TTL.TRAFFIC_STATS, // Всегда фиксированный
-            GROUPS: DEFAULT_TTL.GROUPS, // Всегда фиксированный
-            DASHBOARD_COUNTS: DEFAULT_TTL.DASHBOARD_COUNTS, // Всегда фиксированный
+            SETTINGS: DEFAULT_TTL.SETTINGS, // Always fixed
+            TRAFFIC_STATS: DEFAULT_TTL.TRAFFIC_STATS, // Always fixed
+            GROUPS: DEFAULT_TTL.GROUPS, // Always fixed
+            DASHBOARD_COUNTS: DEFAULT_TTL.DASHBOARD_COUNTS, // Always fixed
         };
         logger.info(`[Cache] TTL updated: sub=${this.ttl.SUBSCRIPTION}s, user=${this.ttl.USER}s`);
     }
 
     /**
-     * Подключение к Redis
+     * Connect to Redis
      */
     async connect() {
         const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -82,7 +82,7 @@ class CacheService {
 
             this.redis.on('connect', () => {
                 this.connected = true;
-                logger.info('✅ Redis connected');
+                logger.info('[Redis] Connected');
             });
 
             this.redis.on('error', (err) => {
@@ -104,16 +104,16 @@ class CacheService {
     }
 
     /**
-     * Проверка подключения
+     * Check connection status
      */
     isConnected() {
         return this.connected && this.redis;
     }
 
-    // ==================== ПОДПИСКИ ====================
+    // ==================== SUBSCRIPTIONS ====================
 
     /**
-     * Получить подписку из кэша
+     * Get subscription from cache
      */
     async getSubscription(token, format) {
         if (!this.isConnected()) return null;
@@ -133,7 +133,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить подписку в кэш
+     * Save subscription to cache
      */
     async setSubscription(token, format, data) {
         if (!this.isConnected()) return;
@@ -148,8 +148,8 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать подписку (все форматы)
-     * Использует SCAN вместо KEYS для неблокирующей работы
+     * Invalidate subscription (all formats)
+     * Uses SCAN instead of KEYS for non-blocking operation
      */
     async invalidateSubscription(token) {
         if (!this.isConnected()) return;
@@ -168,8 +168,8 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать все подписки (при изменении нод)
-     * Использует SCAN вместо KEYS для неблокирующей работы
+     * Invalidate all subscriptions (when nodes change)
+     * Uses SCAN instead of KEYS for non-blocking operation
      */
     async invalidateAllSubscriptions() {
         if (!this.isConnected()) return;
@@ -179,7 +179,7 @@ class CacheService {
             const keysToDelete = await this._scanKeys(pattern);
             
             if (keysToDelete.length > 0) {
-                // Удаляем батчами по 100 ключей для избежания блокировки
+                // Delete in batches of 100 keys to avoid blocking
                 const BATCH_SIZE = 100;
                 for (let i = 0; i < keysToDelete.length; i += BATCH_SIZE) {
                     const batch = keysToDelete.slice(i, i + BATCH_SIZE);
@@ -193,9 +193,9 @@ class CacheService {
     }
     
     /**
-     * Неблокирующий поиск ключей через SCAN
-     * @param {string} pattern - паттерн для поиска
-     * @returns {Promise<string[]>} - массив найденных ключей
+     * Non-blocking key search via SCAN
+     * @param {string} pattern - search pattern
+     * @returns {Promise<string[]>} - array of found keys
      */
     async _scanKeys(pattern) {
         const keys = [];
@@ -210,10 +210,10 @@ class CacheService {
         return keys;
     }
 
-    // ==================== ПОЛЬЗОВАТЕЛИ ====================
+    // ==================== USERS ====================
 
     /**
-     * Получить пользователя из кэша
+     * Get user from cache
      */
     async getUser(userId) {
         if (!this.isConnected()) return null;
@@ -233,14 +233,14 @@ class CacheService {
     }
 
     /**
-     * Сохранить пользователя в кэш
+     * Save user to cache
      */
     async setUser(userId, userData) {
         if (!this.isConnected()) return;
         
         try {
             const key = `${PREFIX.USER}${userId}`;
-            // Не кэшируем пароль
+            // Don't cache password
             const safeData = { ...userData };
             if (safeData.password) delete safeData.password;
             
@@ -252,7 +252,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать пользователя
+     * Invalidate user cache
      */
     async invalidateUser(userId) {
         if (!this.isConnected()) return;
@@ -266,12 +266,12 @@ class CacheService {
         }
     }
 
-    // ==================== УСТРОЙСТВА (IP) ====================
+    // ==================== DEVICES (IP) ====================
 
     /**
-     * Получить все IP устройств пользователя с timestamps
+     * Get all device IPs for user with timestamps
      * @param {string} userId 
-     * @returns {Object} { ip: timestamp, ... } или пустой объект
+     * @returns {Object} { ip: timestamp, ... } or empty object
      */
     async getDeviceIPs(userId) {
         if (!this.isConnected()) return {};
@@ -287,7 +287,7 @@ class CacheService {
     }
 
     /**
-     * Обновить timestamp для IP устройства
+     * Update timestamp for device IP
      * @param {string} userId 
      * @param {string} ip 
      */
@@ -297,17 +297,17 @@ class CacheService {
         try {
             const key = `${PREFIX.DEVICES}${userId}`;
             await this.redis.hset(key, ip, Date.now().toString());
-            // Устанавливаем TTL на весь ключ (автоочистка неактивных юзеров)
-            await this.redis.expire(key, 86400); // 24 часа
+            // Set TTL on entire key (auto-cleanup inactive users)
+            await this.redis.expire(key, 86400); // 24 hours
         } catch (err) {
             logger.error(`[Cache] updateDeviceIP error: ${err.message}`);
         }
     }
 
     /**
-     * Удалить устаревшие IP устройств
+     * Remove stale device IPs
      * @param {string} userId 
-     * @param {number} gracePeriodMs - период в миллисекундах
+     * @param {number} gracePeriodMs - period in milliseconds
      */
     async cleanupOldDeviceIPs(userId, gracePeriodMs) {
         if (!this.isConnected()) return;
@@ -334,7 +334,7 @@ class CacheService {
     }
 
     /**
-     * Сбросить все устройства пользователя (при отключении/кике)
+     * Clear all user devices (on disable/kick)
      * @param {string} userId 
      */
     async clearDeviceIPs(userId) {
@@ -349,11 +349,11 @@ class CacheService {
         }
     }
 
-    // ==================== ОНЛАЙН-СЕССИИ (legacy, для совместимости) ====================
+    // ==================== ONLINE SESSIONS (legacy, for compatibility) ====================
 
     /**
-     * Получить онлайн-сессии (legacy)
-     * @deprecated Используйте getDeviceIPs для подсчёта устройств
+     * Get online sessions (legacy)
+     * @deprecated Use getDeviceIPs for device counting
      */
     async getOnlineSessions() {
         if (!this.isConnected()) return null;
@@ -371,8 +371,8 @@ class CacheService {
     }
 
     /**
-     * Сохранить онлайн-сессии (legacy)
-     * @deprecated Используйте updateDeviceIP для обновления устройств
+     * Save online sessions (legacy)
+     * @deprecated Use updateDeviceIP for device updates
      */
     async setOnlineSessions(data) {
         if (!this.isConnected()) return;
@@ -384,10 +384,10 @@ class CacheService {
         }
     }
 
-    // ==================== АКТИВНЫЕ НОДЫ ====================
+    // ==================== ACTIVE NODES ====================
 
     /**
-     * Получить активные ноды
+     * Get active nodes
      */
     async getActiveNodes() {
         if (!this.isConnected()) return null;
@@ -406,7 +406,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить активные ноды
+     * Save active nodes
      */
     async setActiveNodes(nodes) {
         if (!this.isConnected()) return;
@@ -420,7 +420,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать ноды
+     * Invalidate nodes cache
      */
     async invalidateNodes() {
         if (!this.isConnected()) return;
@@ -433,10 +433,10 @@ class CacheService {
         }
     }
 
-    // ==================== НАСТРОЙКИ ====================
+    // ==================== SETTINGS ====================
 
     /**
-     * Получить настройки
+     * Get settings
      */
     async getSettings() {
         if (!this.isConnected()) return null;
@@ -454,7 +454,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить настройки
+     * Save settings
      */
     async setSettings(settings) {
         if (!this.isConnected()) return;
@@ -467,7 +467,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать настройки
+     * Invalidate settings cache
      */
     async invalidateSettings() {
         if (!this.isConnected()) return;
@@ -479,10 +479,10 @@ class CacheService {
         }
     }
 
-    // ==================== СТАТИСТИКА ТРАФИКА ====================
+    // ==================== TRAFFIC STATS ====================
 
     /**
-     * Получить статистику трафика
+     * Get traffic stats
      */
     async getTrafficStats() {
         if (!this.isConnected()) return null;
@@ -501,7 +501,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить статистику трафика
+     * Save traffic stats
      */
     async setTrafficStats(stats) {
         if (!this.isConnected()) return;
@@ -515,7 +515,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать статистику трафика
+     * Invalidate traffic stats cache
      */
     async invalidateTrafficStats() {
         if (!this.isConnected()) return;
@@ -528,10 +528,10 @@ class CacheService {
         }
     }
 
-    // ==================== ГРУППЫ ====================
+    // ==================== GROUPS ====================
 
     /**
-     * Получить активные группы
+     * Get active groups
      */
     async getGroups() {
         if (!this.isConnected()) return null;
@@ -550,7 +550,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить активные группы
+     * Save active groups
      */
     async setGroups(groups) {
         if (!this.isConnected()) return;
@@ -564,7 +564,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать группы
+     * Invalidate groups cache
      */
     async invalidateGroups() {
         if (!this.isConnected()) return;
@@ -577,10 +577,10 @@ class CacheService {
         }
     }
 
-    // ==================== СЧЁТЧИКИ ДАШБОРДА ====================
+    // ==================== DASHBOARD COUNTERS ====================
 
     /**
-     * Получить счётчики для дашборда
+     * Get dashboard counters
      */
     async getDashboardCounts() {
         if (!this.isConnected()) return null;
@@ -599,7 +599,7 @@ class CacheService {
     }
 
     /**
-     * Сохранить счётчики для дашборда
+     * Save dashboard counters
      */
     async setDashboardCounts(counts) {
         if (!this.isConnected()) return;
@@ -613,7 +613,7 @@ class CacheService {
     }
 
     /**
-     * Инвалидировать счётчики дашборда
+     * Invalidate dashboard counters cache
      */
     async invalidateDashboardCounts() {
         if (!this.isConnected()) return;
@@ -660,7 +660,7 @@ class CacheService {
             const info = await this.redis.info('memory');
             const dbSize = await this.redis.dbsize();
             
-            // Парсим used_memory
+            // Parse used_memory
             const usedMemoryMatch = info.match(/used_memory:(\d+)/);
             const usedMemory = usedMemoryMatch ? parseInt(usedMemoryMatch[1]) : 0;
             
@@ -675,7 +675,7 @@ class CacheService {
     }
 }
 
-// Синглтон
+// Singleton
 const cacheService = new CacheService();
 
 module.exports = cacheService;

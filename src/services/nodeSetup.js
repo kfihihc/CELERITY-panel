@@ -1,5 +1,5 @@
 /**
- * Сервис автоматической настройки нод Hysteria через SSH
+ * Hysteria node auto-setup service via SSH
  */
 
 const { Client } = require('ssh2');
@@ -8,20 +8,18 @@ const config = require('../../config');
 const cryptoService = require('./cryptoService');
 
 /**
- * Генерирует конфиг Hysteria для ноды
- * ВАЖНО: tls и acme - это два РАЗНЫХ варианта, нельзя использовать оба!
+ * Generate Hysteria config for node
  */
 function generateHysteriaConfig(node, authUrl) {
-    // TLS секция: либо ACME (автоматические сертификаты), либо ручные сертификаты
     const tlsSection = node.domain 
-        ? `# Автоматические сертификаты через ACME (Let's Encrypt)
+        ? `# ACME (Let's Encrypt)
 acme:
   domains:
     - ${node.domain}
   email: admin@${node.domain}
   dir: /etc/hysteria/acme
   listenHost: 0.0.0.0`
-        : `# Самоподписанные сертификаты
+        : `# Self-signed certificate
 tls:
   cert: /etc/hysteria/cert.pem
   key: /etc/hysteria/key.pem`;
@@ -75,35 +73,26 @@ ${node.statsSecret ? `trafficStats:
 `;
 }
 
-/**
- * Скрипт установки Hysteria
- */
 const INSTALL_SCRIPT = `#!/bin/bash
 set -e
 
 echo "=== [1/5] Checking Hysteria installation ==="
 
-# Установка Hysteria если не установлен
 if ! command -v hysteria &> /dev/null; then
     echo "Hysteria not found. Installing..."
     bash <(curl -fsSL https://get.hy2.sh/)
-    echo "✓ Hysteria installed"
+    echo "Done: Hysteria installed"
 else
-    echo "✓ Hysteria already installed"
+    echo "Done: Hysteria already installed"
 fi
 
-# Создаём директорию
 mkdir -p /etc/hysteria
-echo "✓ Directory /etc/hysteria ready"
+echo "Done: Directory /etc/hysteria ready"
 
-# Проверяем версию
 echo "Hysteria version:"
 hysteria version
 `;
 
-/**
- * Скрипт настройки port hopping
- */
 function getPortHoppingScript(portRange, mainPort) {
     if (!portRange || !portRange.includes('-')) return '';
     
@@ -112,94 +101,81 @@ function getPortHoppingScript(portRange, mainPort) {
     return `
 echo "=== [4/5] Setting up port hopping ${start}-${end} -> ${mainPort} ==="
 
-# Очищаем старые правила (все варианты - с интерфейсом и без)
+# Clear old rules
 iptables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 ip6tables -t nat -D PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
-# Очищаем старые правила с привязкой к интерфейсу (legacy)
+# Clear legacy interface-specific rules
 for iface in eth0 eth1 ens3 ens5 enp0s3 eno1; do
     iptables -t nat -D PREROUTING -i $iface -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
     ip6tables -t nat -D PREROUTING -i $iface -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 done
 
-# Добавляем новые правила (БЕЗ привязки к интерфейсу - работает на всех)
+# Add new rules (no interface binding)
 iptables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
 ip6tables -t nat -A PREROUTING -p udp --dport ${start}:${end} -j REDIRECT --to-port ${mainPort}
-echo "✓ iptables NAT rules added"
+echo "Done: iptables NAT rules added"
 
-# Открываем порты в firewall (ufw)
+# Open ports in firewall (ufw)
 if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow ${start}:${end}/udp 2>/dev/null || true
-    echo "✓ UFW rules added"
+    echo "Done: UFW rules added"
 fi
 
-# Сохраняем правила
+# Save rules
 if command -v netfilter-persistent &> /dev/null; then
     netfilter-persistent save 2>/dev/null
-    echo "✓ Rules saved with netfilter-persistent"
+    echo "Done: Rules saved with netfilter-persistent"
 elif [ -f /etc/debian_version ]; then
-    # Пытаемся установить iptables-persistent
     apt-get install -y iptables-persistent 2>/dev/null || true
     netfilter-persistent save 2>/dev/null || true
 elif command -v iptables-save &> /dev/null; then
-    # Fallback для других систем
     mkdir -p /etc/iptables
     iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
     ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
-    echo "✓ Rules saved with iptables-save"
+    echo "Done: Rules saved with iptables-save"
 fi
 
-echo "✓ Port hopping configured: ${start}-${end} -> ${mainPort}"
+echo "Done: Port hopping configured: ${start}-${end} -> ${mainPort}"
 `;
 }
 
-/**
- * Скрипт генерации самоподписанного сертификата (совместимый с sh)
- */
 const SELF_SIGNED_CERT_SCRIPT = `
 echo "=== [2/5] Generating self-signed certificate ==="
 
-# Проверяем наличие openssl
 if ! command -v openssl &> /dev/null; then
     echo "Installing openssl..."
     apt-get update && apt-get install -y openssl
 fi
 
-# Проверяем существующие файлы
 echo "Checking existing certificates..."
 ls -la /etc/hysteria/*.pem 2>/dev/null || echo "No existing cert files"
 
-# Проверяем валидность существующего сертификата
 CERT_VALID=0
 if [ -f /etc/hysteria/cert.pem ] && [ -s /etc/hysteria/cert.pem ] && [ -f /etc/hysteria/key.pem ] && [ -s /etc/hysteria/key.pem ]; then
     if openssl x509 -in /etc/hysteria/cert.pem -noout 2>/dev/null; then
-        echo "✓ Valid certificate already exists"
+        echo "Done: Valid certificate already exists"
         CERT_VALID=1
         openssl x509 -in /etc/hysteria/cert.pem -noout -subject -dates
     else
-        echo "⚠ Certificate file exists but is invalid, regenerating..."
+        echo "Warning: Certificate file exists but is invalid, regenerating..."
     fi
 fi
 
 if [ "$CERT_VALID" = "0" ]; then
     echo "Generating new certificate..."
     
-    # Удаляем старые/повреждённые файлы
     rm -f /etc/hysteria/cert.pem /etc/hysteria/key.pem /tmp/ecparam.pem
-    
-    # Создаём директорию
     mkdir -p /etc/hysteria
     
-    # Генерируем EC параметры
     echo "Step 1: Generating EC parameters..."
     openssl ecparam -name prime256v1 -out /tmp/ecparam.pem
     if [ ! -f /tmp/ecparam.pem ]; then
-        echo "❌ Failed to create EC parameters"
+        echo "Error: Failed to create EC parameters"
         exit 1
     fi
-    echo "✓ EC parameters created"
+    echo "Done: EC parameters created"
     
-    # Генерируем сертификат
     echo "Step 2: Generating certificate..."
     openssl req -x509 -nodes -newkey ec:/tmp/ecparam.pem \\
         -keyout /etc/hysteria/key.pem \\
@@ -207,12 +183,10 @@ if [ "$CERT_VALID" = "0" ]; then
         -subj "/CN=bing.com" \\
         -days 36500 2>&1
     
-    # Проверяем результат
     if [ ! -f /etc/hysteria/cert.pem ] || [ ! -s /etc/hysteria/cert.pem ]; then
-        echo "❌ Certificate file not created or empty!"
+        echo "Error: Certificate file not created or empty!"
         echo "Trying alternative method with RSA..."
         
-        # Fallback на RSA если EC не работает
         openssl req -x509 -nodes -newkey rsa:2048 \\
             -keyout /etc/hysteria/key.pem \\
             -out /etc/hysteria/cert.pem \\
@@ -221,34 +195,27 @@ if [ "$CERT_VALID" = "0" ]; then
     fi
     
     if [ ! -f /etc/hysteria/key.pem ] || [ ! -s /etc/hysteria/key.pem ]; then
-        echo "❌ Key file not created or empty!"
+        echo "Error: Key file not created or empty!"
         exit 1
     fi
     
-    # Устанавливаем права
     chmod 600 /etc/hysteria/key.pem
     chmod 644 /etc/hysteria/cert.pem
-    
-    # Удаляем временный файл
     rm -f /tmp/ecparam.pem
     
-    # Финальная проверка
     echo "Step 3: Verifying certificate..."
     if openssl x509 -in /etc/hysteria/cert.pem -noout 2>/dev/null; then
-        echo "✓ Certificate generated successfully!"
+        echo "Done: Certificate generated successfully!"
         openssl x509 -in /etc/hysteria/cert.pem -noout -subject -dates
         ls -la /etc/hysteria/*.pem
     else
-        echo "❌ Certificate verification failed!"
+        echo "Error: Certificate verification failed!"
         cat /etc/hysteria/cert.pem
         exit 1
     fi
 fi
 `;
 
-/**
- * Подключение к ноде по SSH
- */
 function connectSSH(node) {
     return new Promise((resolve, reject) => {
         const conn = new Client();
@@ -263,7 +230,6 @@ function connectSSH(node) {
         if (node.ssh?.privateKey) {
             connConfig.privateKey = node.ssh.privateKey;
         } else if (node.ssh?.password) {
-            // Расшифровываем пароль
             connConfig.password = cryptoService.decrypt(node.ssh.password);
         } else {
             return reject(new Error('SSH credentials not provided'));
@@ -275,9 +241,6 @@ function connectSSH(node) {
     });
 }
 
-/**
- * Выполнение команды через SSH с возвратом всего вывода
- */
 function execSSH(conn, command) {
     return new Promise((resolve, reject) => {
         conn.exec(command, (err, stream) => {
@@ -287,7 +250,6 @@ function execSSH(conn, command) {
             let stderr = '';
             
             stream.on('close', (code) => {
-                // Возвращаем весь вывод даже при ошибке (для логирования)
                 const output = stdout + (stderr ? '\n[STDERR]:\n' + stderr : '');
                 
                 if (code === 0) {
@@ -303,9 +265,6 @@ function execSSH(conn, command) {
     });
 }
 
-/**
- * Загрузка файла через SSH
- */
 function uploadFile(conn, content, remotePath) {
     return new Promise((resolve, reject) => {
         conn.sftp((err, sftp) => {
@@ -320,9 +279,6 @@ function uploadFile(conn, content, remotePath) {
     });
 }
 
-/**
- * Настройка ноды с детальным логированием
- */
 async function setupNode(node, options = {}) {
     const { installHysteria = true, setupPortHopping = true, restartService = true } = options;
     
@@ -341,12 +297,10 @@ async function setupNode(node, options = {}) {
     let conn;
     
     try {
-        // 0. Подключение
         log('Connecting via SSH...');
         conn = await connectSSH(node);
-        log('✓ SSH connected');
+        log('SSH connected');
         
-        // 1. Установка Hysteria
         if (installHysteria) {
             log('Installing Hysteria...');
             const installResult = await execSSH(conn, INSTALL_SCRIPT);
@@ -355,10 +309,9 @@ async function setupNode(node, options = {}) {
             if (!installResult.success) {
                 throw new Error(`Hysteria installation failed: ${installResult.error}`);
             }
-            log('✓ Hysteria installed');
+            log('Hysteria installed');
         }
         
-        // 2. Генерация сертификата (если нет домена) или подготовка для ACME
         if (!node.domain) {
             log('Generating self-signed certificate...');
             const certResult = await execSSH(conn, SELF_SIGNED_CERT_SCRIPT);
@@ -367,63 +320,55 @@ async function setupNode(node, options = {}) {
             if (!certResult.success) {
                 throw new Error(`Certificate generation failed: ${certResult.error}`);
             }
-            log('✓ Certificate ready');
+            log('Certificate ready');
         } else {
             log(`Domain detected (${node.domain}), ACME will be used`);
             log('Opening port 80 for ACME HTTP-01 challenge...');
             
-            // Открываем порт 80 и настраиваем права для ACME
             const acmeSetup = await execSSH(conn, `
 echo "=== Setting up for ACME ==="
 
-# Создаём директорию для ACME с правильными правами
 mkdir -p /etc/hysteria/acme
 chmod 777 /etc/hysteria/acme
 chmod 755 /etc/hysteria
-echo "✓ ACME directory created with correct permissions"
+echo "Done: ACME directory created with correct permissions"
 
-# Проверяем права
 ls -la /etc/hysteria/
 
-# Проверяем/открываем порт 80 (iptables)
 if command -v iptables &> /dev/null; then
     iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
     iptables -I INPUT -p udp --dport 80 -j ACCEPT 2>/dev/null || true
-    echo "✓ Port 80 opened in iptables"
+    echo "Done: Port 80 opened in iptables"
 fi
 
-# Проверяем/открываем порт 80 (ufw)
 if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     ufw allow 80/tcp 2>/dev/null || true
     ufw allow 80/udp 2>/dev/null || true
-    echo "✓ Port 80 opened in ufw"
+    echo "Done: Port 80 opened in ufw"
 fi
 
-# Проверяем что порт 80 свободен
 if ss -tlnp | grep -q ':80 '; then
-    echo "⚠ Warning: Port 80 is already in use:"
+    echo "Warning: Port 80 is already in use:"
     ss -tlnp | grep ':80 '
 else
-    echo "✓ Port 80 is free"
+    echo "Done: Port 80 is free"
 fi
 
-echo "✓ ACME preparation complete"
+echo "Done: ACME preparation complete"
 echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
             `);
             logs.push(acmeSetup.output);
-            log('✓ ACME preparation done');
+            log('ACME preparation done');
         }
         
-        // 3. Загрузка конфига
         log('Uploading config...');
         const hysteriaConfig = generateHysteriaConfig(node, authUrl);
         await uploadFile(conn, hysteriaConfig, '/etc/hysteria/config.yaml');
-        log('✓ Config uploaded to /etc/hysteria/config.yaml');
+        log('Config uploaded to /etc/hysteria/config.yaml');
         logs.push('--- Config content ---');
         logs.push(hysteriaConfig);
         logs.push('--- End config ---');
         
-        // 4. Port hopping
         if (setupPortHopping && node.portRange) {
             log(`Setting up port hopping (${node.portRange})...`);
             const portHoppingScript = getPortHoppingScript(node.portRange, node.port || 443);
@@ -432,42 +377,38 @@ echo "Note: Make sure DNS for ${node.domain} points to this server's IP!"
                 logs.push(hopResult.output);
                 
                 if (!hopResult.success) {
-                    log(`⚠ Port hopping setup warning: ${hopResult.error}`);
+                    log(`Port hopping setup warning: ${hopResult.error}`);
                 } else {
-                    log('✓ Port hopping configured');
+                    log('Port hopping configured');
                 }
             }
         }
         
-        // 5. Открытие портов в firewall
         const statsPort = node.statsPort || 9999;
         const mainPort = node.port || 443;
         log(`Opening firewall ports (${mainPort}, ${statsPort})...`);
         const firewallResult = await execSSH(conn, `
 echo "=== [5/6] Opening firewall ports ==="
 
-# iptables
 if command -v iptables &> /dev/null; then
     iptables -I INPUT -p tcp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
     iptables -I INPUT -p udp --dport ${mainPort} -j ACCEPT 2>/dev/null || true
     iptables -I INPUT -p tcp --dport ${statsPort} -j ACCEPT 2>/dev/null || true
-    echo "✓ Ports ${mainPort}, ${statsPort} opened in iptables"
+    echo "Done: Ports ${mainPort}, ${statsPort} opened in iptables"
 fi
 
-# ufw
 if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
     ufw allow ${mainPort}/tcp 2>/dev/null || true
     ufw allow ${mainPort}/udp 2>/dev/null || true
     ufw allow ${statsPort}/tcp 2>/dev/null || true
-    echo "✓ Ports ${mainPort}, ${statsPort} opened in ufw"
+    echo "Done: Ports ${mainPort}, ${statsPort} opened in ufw"
 fi
 
-echo "✓ Firewall configured"
+echo "Done: Firewall configured"
         `);
         logs.push(firewallResult.output);
-        log('✓ Firewall ports opened');
+        log('Firewall ports opened');
         
-        // 6. Перезапуск сервиса
         if (restartService) {
             log('Restarting Hysteria service...');
             const restartResult = await execSSH(conn, `
@@ -484,17 +425,17 @@ journalctl -u hysteria-server -n 20 --no-pager || true
             logs.push(restartResult.output);
             
             if (!restartResult.success) {
-                log(`⚠ Service restart warning: ${restartResult.error}`);
+                log(`Service restart warning: ${restartResult.error}`);
             } else {
-                log('✓ Service restarted');
+                log('Service restarted');
             }
         }
         
-        log('✅ Setup completed successfully!');
+        log('Setup completed successfully!');
         return { success: true, logs };
         
     } catch (error) {
-        log(`❌ Error: ${error.message}`);
+        log(`Error: ${error.message}`);
         return { success: false, error: error.message, logs };
         
     } finally {
@@ -504,9 +445,6 @@ journalctl -u hysteria-server -n 20 --no-pager || true
     }
 }
 
-/**
- * Проверка статуса ноды через SSH
- */
 async function checkNodeStatus(node) {
     try {
         const conn = await connectSSH(node);
@@ -522,9 +460,6 @@ async function checkNodeStatus(node) {
     }
 }
 
-/**
- * Получение логов Hysteria с ноды
- */
 async function getNodeLogs(node, lines = 50) {
     try {
         const conn = await connectSSH(node);

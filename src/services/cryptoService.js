@@ -1,6 +1,5 @@
 /**
- * Сервис шифрования паролей пользователей
- * Пароль = зашифрованный userId
+ * Encryption service for user passwords and SSH credentials
  */
 
 const CryptoJS = require('crypto-js');
@@ -12,30 +11,22 @@ class CryptoService {
     }
 
     /**
-     * Генерирует пароль для пользователя на основе его userId
-     * @param {string} userId - ID пользователя (telegram id)
-     * @returns {string} - Зашифрованный пароль
+     * Generate deterministic password from userId
      */
     generatePassword(userId) {
-        // Используем HMAC-SHA256 для генерации детерминированного пароля
         const hash = CryptoJS.HmacSHA256(String(userId), this.key);
-        // Берём первые 24 символа hex для удобства
         return hash.toString(CryptoJS.enc.Hex).substring(0, 24);
     }
 
     /**
-     * Шифрует данные
-     * @param {string} data 
-     * @returns {string}
+     * Encrypt data
      */
     encrypt(data) {
         return CryptoJS.AES.encrypt(String(data), this.key).toString();
     }
 
     /**
-     * Расшифровывает данные
-     * @param {string} encryptedData 
-     * @returns {string}
+     * Decrypt data
      */
     decrypt(encryptedData) {
         const bytes = CryptoJS.AES.decrypt(encryptedData, this.key);
@@ -43,8 +34,7 @@ class CryptoService {
     }
 
     /**
-     * Генерирует случайный секрет для API статистики ноды
-     * @returns {string}
+     * Generate random secret for node stats API
      */
     generateNodeSecret() {
         return CryptoJS.lib.WordArray.random(16).toString();
@@ -52,6 +42,7 @@ class CryptoService {
 }
 
 module.exports = new CryptoService();
+
 
 
 

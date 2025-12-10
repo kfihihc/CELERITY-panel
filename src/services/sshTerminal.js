@@ -1,6 +1,5 @@
 /**
  * WebSocket SSH Terminal Service
- * Проксирует SSH сессию через WebSocket для веб-терминала
  */
 
 const { Client } = require('ssh2');
@@ -9,11 +8,11 @@ const cryptoService = require('./cryptoService');
 
 class SSHTerminalManager {
     constructor() {
-        this.sessions = new Map(); // sessionId -> { conn, stream }
+        this.sessions = new Map();
     }
 
     /**
-     * Создаёт SSH сессию
+     * Create SSH session
      */
     async createSession(sessionId, node, ws) {
         return new Promise((resolve, reject) => {
@@ -29,7 +28,6 @@ class SSHTerminalManager {
             if (node.ssh?.privateKey) {
                 config.privateKey = node.ssh.privateKey;
             } else if (node.ssh?.password) {
-                // Расшифровываем пароль
                 config.password = cryptoService.decrypt(node.ssh.password);
             } else {
                 reject(new Error('SSH credentials not configured'));
@@ -46,10 +44,8 @@ class SSHTerminalManager {
                         return;
                     }
                     
-                    // Сохраняем сессию
                     this.sessions.set(sessionId, { conn, stream, node });
                     
-                    // Данные от SSH -> WebSocket
                     stream.on('data', (data) => {
                         if (ws.readyState === 1) { // WebSocket.OPEN
                             ws.send(JSON.stringify({ type: 'output', data: data.toString('utf8') }));
@@ -89,7 +85,7 @@ class SSHTerminalManager {
     }
 
     /**
-     * Отправляет данные в SSH
+     * Write data to SSH
      */
     write(sessionId, data) {
         const session = this.sessions.get(sessionId);
@@ -99,7 +95,7 @@ class SSHTerminalManager {
     }
 
     /**
-     * Изменяет размер терминала
+     * Resize terminal
      */
     resize(sessionId, cols, rows) {
         const session = this.sessions.get(sessionId);
@@ -109,7 +105,7 @@ class SSHTerminalManager {
     }
 
     /**
-     * Закрывает сессию
+     * Close session
      */
     closeSession(sessionId) {
         const session = this.sessions.get(sessionId);
@@ -126,7 +122,7 @@ class SSHTerminalManager {
     }
 
     /**
-     * Получает информацию о сессии
+     * Get session info
      */
     getSession(sessionId) {
         return this.sessions.get(sessionId);

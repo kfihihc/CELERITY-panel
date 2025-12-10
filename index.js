@@ -1,12 +1,6 @@
 /**
  * C³ CELERITY - Management panel for Hysteria 2 nodes
  * by Click Connect
- * 
- * Включает:
- * - REST API для интеграции
- * - HTTP Auth для нод
- * - Веб-панель управления (SSR)
- * - Автоматический SSL сертификат (Let's Encrypt)
  */
 
 const express = require('express');
@@ -28,7 +22,6 @@ const { countRequest } = require('./src/middleware/rpsCounter');
 const syncService = require('./src/services/syncService');
 const cacheService = require('./src/services/cacheService');
 
-// Роуты API
 const usersRoutes = require('./src/routes/users');
 const nodesRoutes = require('./src/routes/nodes');
 const subscriptionRoutes = require('./src/routes/subscription');
@@ -37,24 +30,20 @@ const panelRoutes = require('./src/routes/panel');
 
 const app = express();
 
-// Trust proxy (Caddy) - 1 уровень прокси
 app.set('trust proxy', 1);
 
 // ==================== MIDDLEWARE ====================
 
-// Compression (gzip/brotli) для всех ответов
 app.use(compression({
     filter: (req, res) => {
-        // Не сжимаем если клиент не хочет
         if (req.headers['x-no-compression']) {
             return false;
         }
         return compression.filter(req, res);
     },
-    level: 6, // Баланс между скоростью и степенью сжатия
+    level: 6,
 }));
 
-// CORS: ограничиваем только на свой домен
 app.use(cors({
     origin: config.BASE_URL,
     credentials: true,
@@ -62,8 +51,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Сессии для панели (Redis store + secure cookies для HTTPS)
-// RedisStore инициализируется после подключения к Redis в startServer()
 let sessionMiddleware = null;
 
 function initSessionMiddleware() {
@@ -77,36 +64,26 @@ function initSessionMiddleware() {
         saveUninitialized: false,
         cookie: { 
             secure: true,
-            maxAge: 24 * 60 * 60 * 1000 // 24 часа
+            maxAge: 24 * 60 * 60 * 1000
         }
     });
 }
 
-// Middleware-обёртка для отложенной инициализации сессий
 app.use((req, res, next) => {
     if (sessionMiddleware) {
         return sessionMiddleware(req, res, next);
     }
-    // Fallback если Redis ещё не подключен
     next();
 });
 
-// Интернационализация (i18n)
 app.use(i18nMiddleware);
-
-// Подсчет RPS/RPM для всех запросов (O(1), очень быстро)
 app.use(countRequest);
-
-// Статика
 app.use(express.static(path.join(__dirname, 'public')));
 
-// EJS шаблоны
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Логирование запросов (debug уровень, кроме статики и частых API)
 app.use((req, res, next) => {
-    // Пропускаем статику и высокочастотные эндпоинты
     const skipPaths = ['/css', '/js', '/api/auth', '/api/files', '/health'];
     const shouldSkip = skipPaths.some(p => req.path.startsWith(p));
     
@@ -132,17 +109,15 @@ app.get('/health', async (req, res) => {
 
 // ==================== API ROUTES ====================
 
-// HTTP Auth для Hysteria нод (без авторизации панели)
 app.use('/api/auth', authRoutes);
 
-// API логин/логаут
 const Admin = require('./src/models/adminModel');
 const rateLimit = require('express-rate-limit');
 
 const apiLoginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
-    message: { error: 'Слишком много попыток. Попробуйте через 15 минут.' },
+    message: { error: 'Too many attempts. Try again in 15 minutes.' },
 });
 
 app.post('/api/login', apiLoginLimiter, async (req, res) => {
@@ -150,25 +125,25 @@ app.post('/api/login', apiLoginLimiter, async (req, res) => {
         const { username, password } = req.body;
         
         if (!username || !password) {
-            return res.status(400).json({ error: 'Укажите username и password' });
+            return res.status(400).json({ error: 'Username and password required' });
         }
         
         const admin = await Admin.verifyPassword(username, password);
         
         if (!admin) {
-            logger.warn(`[API] Неудачный вход: ${username} (IP: ${req.ip})`);
-            return res.status(401).json({ error: 'Неверный логин или пароль' });
+            logger.warn(`[API] Failed login: ${username} (IP: ${req.ip})`);
+            return res.status(401).json({ error: 'Invalid username or password' });
         }
         
         req.session.authenticated = true;
         req.session.adminUsername = admin.username;
         
-        logger.info(`[API] Успешный вход: ${admin.username} (IP: ${req.ip})`);
+        logger.info(`[API] Login: ${admin.username} (IP: ${req.ip})`);
         
         res.json({ 
             success: true, 
             username: admin.username,
-            message: 'Авторизация успешна. Используйте cookies для последующих запросов.'
+            message: 'Authentication successful. Use cookies for subsequent requests.'
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -179,20 +154,18 @@ app.post('/api/logout', (req, res) => {
     const username = req.session?.adminUsername;
     req.session.destroy();
     if (username) {
-        logger.info(`[API] Выход: ${username}`);
+        logger.info(`[API] Logout: ${username}`);
     }
     res.json({ success: true });
 });
 
-// Глобальные настройки rate limit (обновляются при старте и изменении настроек)
 const rateLimitSettings = {
     subscriptionPerMinute: 100,
     authPerSecond: 200,
 };
 
-// Rate limiter для подписок (защита от перебора токенов)
 const subscriptionLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 минута
+    windowMs: 60 * 1000,
     max: () => rateLimitSettings.subscriptionPerMinute,
     handler: (req, res) => {
         logger.warn(`[Sub] Rate limit: ${req.ip}`);
@@ -200,15 +173,12 @@ const subscriptionLimiter = rateLimit({
     },
 });
 
-// Функция обновления настроек (экспортируется для panel.js)
 async function reloadSettings() {
     const Settings = require('./src/models/settingsModel');
     const settings = await Settings.get();
     
-    // Обновляем TTL кэша
     cacheService.updateTTL(settings);
     
-    // Обновляем rate limits
     if (settings.rateLimit) {
         rateLimitSettings.subscriptionPerMinute = settings.rateLimit.subscriptionPerMinute || 100;
         rateLimitSettings.authPerSecond = settings.rateLimit.authPerSecond || 200;
@@ -217,28 +187,23 @@ async function reloadSettings() {
 }
 module.exports = { reloadSettings };
 
-// Подписки - единый роут /api/files/:token (с rate limit)
 app.use('/api/files', subscriptionLimiter);
 app.use('/api/info', subscriptionLimiter);
 app.use('/api', subscriptionRoutes);
 
-// API роуты (с авторизацией через сессию)
 app.use('/api/users', requireAuth, usersRoutes);
 app.use('/api/nodes', requireAuth, nodesRoutes);
 
-// Группы API
 app.get('/api/groups', requireAuth, async (req, res) => {
     try {
         const { getActiveGroups } = require('./src/utils/helpers');
         const groups = await getActiveGroups();
-        // Возвращаем только нужные поля
         res.json(groups.map(g => ({ _id: g._id, name: g.name })));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Статистика
 app.get('/api/stats', requireAuth, async (req, res) => {
     try {
         const HyUser = require('./src/models/hyUserModel');
@@ -266,24 +231,21 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     }
 });
 
-// Ручной запуск синхронизации
 app.post('/api/sync', requireAuth, async (req, res) => {
     if (syncService.isSyncing) {
-        return res.status(409).json({ error: 'Синхронизация уже запущена' });
+        return res.status(409).json({ error: 'Sync already in progress' });
     }
     
     syncService.syncAllNodes().catch(err => {
-        logger.error(`[API] Ошибка синхронизации: ${err.message}`);
+        logger.error(`[API] Sync error: ${err.message}`);
     });
     
-    res.json({ message: 'Синхронизация запущена' });
+    res.json({ message: 'Sync started' });
 });
 
-// Кик пользователя
 app.post('/api/kick/:userId', requireAuth, async (req, res) => {
     try {
         await syncService.kickUser(req.params.userId);
-        // Очищаем устройства пользователя из кэша
         await cacheService.clearDeviceIPs(req.params.userId);
         res.json({ success: true });
     } catch (error) {
@@ -295,7 +257,6 @@ app.post('/api/kick/:userId', requireAuth, async (req, res) => {
 
 app.use('/panel', panelRoutes);
 
-// Редирект с корня на панель
 app.get('/', (req, res) => {
     res.redirect('/panel');
 });
@@ -325,48 +286,41 @@ app.use((err, req, res, next) => {
 
 async function startServer() {
     try {
-        // Подключение к MongoDB с оптимизированным пулом соединений
         await mongoose.connect(config.MONGO_URI, {
-            maxPoolSize: 10,              // Максимум соединений в пуле
-            minPoolSize: 2,               // Минимум соединений
+            maxPoolSize: 10,
+            minPoolSize: 2,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
         });
-        logger.info('✅ Подключено к MongoDB');
+        logger.info('[MongoDB] Connected');
         
-        // Подключение к Redis
         await cacheService.connect();
         
-        // Инициализируем Redis session store после подключения к Redis
         initSessionMiddleware();
-        logger.info('✅ Redis session store инициализирован');
+        logger.info('[Redis] Session store initialized');
         
-        // Загрузка настроек (TTL кэша, rate limits)
         await reloadSettings();
         
         const PORT = process.env.PORT || 3000;
         const useCaddy = process.env.USE_CADDY === 'true';
         
         if (useCaddy) {
-            // За Caddy reverse proxy — просто HTTP сервер
             const http = require('http');
             const server = http.createServer(app);
             
-            // WebSocket для SSH терминала
             setupWebSocketServer(server);
             
             server.listen(PORT, () => {
-                logger.info(`✅ HTTP сервер на порту ${PORT} (за Caddy)`);
-                logger.info(`🌐 Панель: https://${config.PANEL_DOMAIN}/panel`);
+                logger.info(`[Server] HTTP listening on port ${PORT} (behind Caddy)`);
+                logger.info(`[Server] Panel: https://${config.PANEL_DOMAIN}/panel`);
             });
         } else {
-            // Standalone с Greenlock (для локальной разработки)
-        logger.info(`🔒 Запуск HTTPS сервера для ${config.PANEL_DOMAIN}`);
+            // Standalone with Greenlock (for local development)
+        logger.info(`[Server] Starting HTTPS for ${config.PANEL_DOMAIN}`);
         
         const Greenlock = require('@root/greenlock-express');
             const greenlockDir = path.join(__dirname, 'greenlock.d');
             
-            // Создаём папки для сертификатов если их нет
             const livePath = path.join(greenlockDir, 'live', config.PANEL_DOMAIN);
             if (!fs.existsSync(livePath)) {
                 fs.mkdirSync(livePath, { recursive: true });
@@ -390,7 +344,7 @@ async function startServer() {
                 };
             fs.writeFileSync(configPath, JSON.stringify(glConfig, null, 2));
         } catch (err) {
-                logger.warn(`⚠️ Greenlock config: ${err.message}`);
+                logger.warn(`[Greenlock] Config error: ${err.message}`);
         }
         
             const glInstance = Greenlock.init({
@@ -404,24 +358,24 @@ async function startServer() {
             glInstance.ready((glx) => {
             const httpServer = glx.httpServer();
             httpServer.listen(80, () => {
-                    logger.info('✅ HTTP сервер на порту 80');
+                    logger.info('[Server] HTTP listening on port 80');
             });
             
             const httpsServer = glx.httpsServer(null, app);
             setupWebSocketServer(httpsServer);
             
             httpsServer.listen(443, () => {
-                logger.info('✅ HTTPS сервер на порту 443');
-                logger.info(`🌐 Панель: https://${config.PANEL_DOMAIN}/panel`);
+                logger.info('[Server] HTTPS listening on port 443');
+                logger.info(`[Server] Panel: https://${config.PANEL_DOMAIN}/panel`);
             });
         });
         }
         
-        // Cron задачи
+            // Cron jobs
         setupCronJobs();
         
     } catch (err) {
-        logger.error(`❌ Ошибка запуска: ${err.message}`);
+        logger.error(`[Server] Startup failed: ${err.message}`);
         process.exit(1);
     }
 }
@@ -437,12 +391,11 @@ function setupWebSocketServer(server) {
         const pathname = request.url;
         
         if (pathname && pathname.startsWith('/ws/terminal/')) {
-            // Проверяем сессию через cookie
             const cookies = cookie.parse(request.headers.cookie || '');
             const sessionId = cookies['connect.sid'];
             
             if (!sessionId) {
-                logger.warn(`[WS] Попытка подключения без сессии: ${request.socket.remoteAddress}`);
+                logger.warn(`[WS] Connection attempt without session: ${request.socket.remoteAddress}`);
                 socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                 socket.destroy();
                 return;
@@ -461,19 +414,19 @@ function setupWebSocketServer(server) {
         const nodeId = urlParts[urlParts.length - 1];
         const sessionId = crypto.randomUUID();
         
-        logger.info(`[WS] SSH терминал для ноды ${nodeId}`);
+        logger.info(`[WS] SSH terminal for node ${nodeId}`);
         
         try {
             const node = await HyNode.findById(nodeId);
             
             if (!node) {
-                ws.send(JSON.stringify({ type: 'error', message: 'Нода не найдена' }));
+                ws.send(JSON.stringify({ type: 'error', message: 'Node not found' }));
                 ws.close();
                 return;
             }
             
             if (!node.ssh?.password && !node.ssh?.privateKey) {
-                ws.send(JSON.stringify({ type: 'error', message: 'SSH данные не настроены' }));
+                ws.send(JSON.stringify({ type: 'error', message: 'SSH credentials not configured' }));
                 ws.close();
                 return;
             }
@@ -494,52 +447,52 @@ function setupWebSocketServer(server) {
                             break;
                     }
                 } catch (err) {
-                    logger.error(`[WS] Ошибка: ${err.message}`);
+                    logger.error(`[WS] Error: ${err.message}`);
                 }
             });
             
             ws.on('close', () => {
-                logger.info(`[WS] Закрыто соединение для ноды ${nodeId}`);
+                logger.info(`[WS] Connection closed for node ${nodeId}`);
                 sshTerminal.closeSession(sessionId);
             });
             
         } catch (error) {
-            logger.error(`[WS] Ошибка терминала: ${error.message}`);
+            logger.error(`[WS] Terminal error: ${error.message}`);
             ws.send(JSON.stringify({ type: 'error', message: error.message }));
             ws.close();
         }
     });
     
-    logger.info('[WS] SSH терминал инициализирован');
+    logger.info('[WS] SSH terminal initialized');
 }
 
 function setupCronJobs() {
-    // Сбор статистики каждые 5 минут
+    // Collect stats every 5 minutes
     cron.schedule('*/5 * * * *', async () => {
-        logger.debug('[Cron] Сбор статистики');
+        logger.debug('[Cron] Collecting stats');
         await syncService.collectAllStats();
     });
     
-    // Health check нод каждую минуту
+    // Health check every minute
     cron.schedule('* * * * *', async () => {
         await syncService.healthCheck();
     });
     
-    // Очистка старых логов каждый день в 3:00
+    // Clean old logs daily at 3:00
     cron.schedule('0 3 * * *', () => {
-        logger.info('[Cron] Очистка старых логов');
-        cleanOldLogs(30); // Удаляем логи старше 30 дней
+        logger.info('[Cron] Cleaning old logs');
+        cleanOldLogs(30);
     });
     
-    // Первоначальный health check через 5 секунд
+    // Initial health check after 5 seconds
     setTimeout(async () => {
-        logger.info('[Startup] Проверка статуса нод');
+        logger.info('[Startup] Checking nodes status');
         await syncService.healthCheck();
     }, 5000);
 }
 
 /**
- * Очистка логов старше N дней
+ * Clean logs older than N days
  */
 function cleanOldLogs(days) {
     try {
@@ -553,7 +506,7 @@ function cleanOldLogs(days) {
         const now = Date.now();
         const maxAge = days * 24 * 60 * 60 * 1000;
         
-        // Список активных файлов Winston (не трогаем)
+        // Active Winston files (skip)
         const activeFiles = ['error.log', 'combined.log'];
         for (let i = 1; i <= 5; i++) {
             activeFiles.push(`combined${i}.log`);
@@ -562,42 +515,39 @@ function cleanOldLogs(days) {
         let deleted = 0;
         
         files.forEach(file => {
-            // Пропускаем активные файлы Winston
             if (activeFiles.includes(file)) {
                 return;
             }
             
-            // Проверяем возраст файла
             const filePath = path.join(logsDir, file);
             const stats = fs.statSync(filePath);
             
             if (now - stats.mtime.getTime() > maxAge) {
                 fs.unlinkSync(filePath);
                 deleted++;
-                logger.info(`[Cleanup] Удалён старый лог: ${file}`);
+                logger.info(`[Cleanup] Deleted old log: ${file}`);
             }
         });
         
         if (deleted > 0) {
-            logger.info(`[Cleanup] Очищено ${deleted} старых файлов логов`);
+            logger.info(`[Cleanup] Removed ${deleted} old log files`);
         }
     } catch (err) {
-        logger.error(`[Cleanup] Ошибка очистки логов: ${err.message}`);
+        logger.error(`[Cleanup] Failed to clean logs: ${err.message}`);
     }
 }
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-    logger.info('Завершение работы...');
+    logger.info('[Server] Shutting down...');
     await mongoose.disconnect();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-    logger.info('Завершение работы...');
+    logger.info('[Server] Shutting down...');
     await mongoose.disconnect();
     process.exit(0);
 });
 
-// Запуск
 startServer();

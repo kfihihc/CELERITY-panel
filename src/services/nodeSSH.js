@@ -1,5 +1,5 @@
 /**
- * SSH сервис для управления нодами Hysteria
+ * SSH service for Hysteria node management
  */
 
 const { Client } = require('ssh2');
@@ -13,7 +13,7 @@ class NodeSSH {
     }
 
     /**
-     * Подключается к ноде по SSH
+     * Connect to node via SSH
      */
     async connect() {
         return new Promise((resolve, reject) => {
@@ -26,7 +26,6 @@ class NodeSSH {
                 readyTimeout: 30000,
             };
             
-            // Добавляем аутентификацию (расшифровываем пароль)
             if (this.node.ssh?.privateKey) {
                 config.privateKey = this.node.ssh.privateKey;
             } else if (this.node.ssh?.password) {
@@ -50,7 +49,7 @@ class NodeSSH {
     }
 
     /**
-     * Закрывает соединение
+     * Close connection
      */
     disconnect() {
         if (this.client) {
@@ -60,7 +59,7 @@ class NodeSSH {
     }
 
     /**
-     * Выполняет команду на удалённом сервере
+     * Execute command on remote server
      */
     async exec(command) {
         return new Promise((resolve, reject) => {
@@ -93,7 +92,7 @@ class NodeSSH {
     }
 
     /**
-     * Записывает файл на удалённый сервер
+     * Write file to remote server
      */
     async writeFile(remotePath, content) {
         return new Promise((resolve, reject) => {
@@ -126,7 +125,7 @@ class NodeSSH {
     }
 
     /**
-     * Читает файл с удалённого сервера
+     * Read file from remote server
      */
     async readFile(remotePath) {
         return new Promise((resolve, reject) => {
@@ -159,11 +158,10 @@ class NodeSSH {
     }
 
     /**
-     * Проверяет статус Hysteria сервиса
+     * Check Hysteria service status
      */
     async checkHysteriaStatus() {
         try {
-            // Ждём 2 секунды чтобы сервис успел подняться после reload
             await new Promise(resolve => setTimeout(resolve, 2000));
             
             const result = await this.exec('systemctl is-active hysteria-server 2>/dev/null || systemctl is-active hysteria 2>/dev/null || echo "unknown"');
@@ -179,11 +177,10 @@ class NodeSSH {
     }
 
     /**
-     * Перезапускает Hysteria
+     * Restart Hysteria service
      */
     async restartHysteria() {
         try {
-            // Пробуем оба возможных имени сервиса
             let result = await this.exec('systemctl restart hysteria-server 2>/dev/null || systemctl restart hysteria 2>/dev/null');
             
             if (result.code !== 0) {
@@ -200,19 +197,16 @@ class NodeSSH {
     }
 
     /**
-     * Reload конфигурации Hysteria (без перезапуска)
+     * Reload Hysteria config
      */
     async reloadHysteria() {
         try {
-            // Сначала пробуем restart (более надёжно чем reload)
             const result = await this.exec('systemctl restart hysteria-server 2>&1 || systemctl restart hysteria 2>&1');
             
             logger.debug(`[SSH] ${this.node.name} restart output: ${result.stdout} ${result.stderr}`);
             
-            // Ждём 3 секунды чтобы сервис поднялся
             await new Promise(resolve => setTimeout(resolve, 3000));
             
-            // Проверяем что сервис действительно запустился
             const statusResult = await this.exec('systemctl is-active hysteria-server 2>/dev/null || systemctl is-active hysteria 2>/dev/null');
             const isActive = statusResult.stdout.trim() === 'active';
             
@@ -232,19 +226,15 @@ class NodeSSH {
     }
 
     /**
-     * Обновляет конфиг на ноде
+     * Update config on node
      */
     async updateConfig(configContent) {
         try {
             const configPath = this.node.paths?.config || '/etc/hysteria/config.yaml';
             
-            // Создаём бэкап
             await this.exec(`cp ${configPath} ${configPath}.bak 2>/dev/null || true`);
-            
-            // Записываем новый конфиг
             await this.writeFile(configPath, configContent);
             
-            // Проверяем синтаксис конфига
             const checkResult = await this.exec(`/usr/local/bin/hysteria check -c ${configPath} 2>&1 || true`);
             
             // If check failed - rollback
@@ -254,7 +244,6 @@ class NodeSSH {
                 return false;
             }
             
-            // Применяем конфиг
             return await this.reloadHysteria();
         } catch (error) {
             logger.error(`[SSH] Config update error: ${error.message}`);
@@ -263,36 +252,34 @@ class NodeSSH {
     }
 
     /**
-     * Настраивает port hopping через iptables
-     * Унифицированная версия (без привязки к интерфейсу)
+     * Setup port hopping via iptables
      */
     async setupPortHopping(portRange) {
         try {
             const mainPort = this.node.port || 443;
             const [startPort, endPort] = portRange.split('-').map(Number);
             
-            // Скрипт полной очистки и настройки
             const script = `
-# Очищаем ВСЕ старые правила (разные варианты)
+# Clear old rules
 iptables -t nat -D PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 ip6tables -t nat -D PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 
-# Очищаем legacy правила с привязкой к интерфейсу
+# Clear legacy interface-specific rules
 for iface in eth0 eth1 ens3 ens5 enp0s3 eno1; do
     iptables -t nat -D PREROUTING -i $iface -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
     ip6tables -t nat -D PREROUTING -i $iface -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort} 2>/dev/null || true
 done
 
-# Добавляем новые правила (БЕЗ привязки к интерфейсу)
+# Add new rules (no interface binding)
 iptables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort}
 ip6tables -t nat -A PREROUTING -p udp --dport ${startPort}:${endPort} -j REDIRECT --to-port ${mainPort}
 
-# Открываем порты в UFW
+# Open ports in UFW
 if command -v ufw &> /dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow ${startPort}:${endPort}/udp 2>/dev/null || true
 fi
 
-# Сохраняем правила
+# Save rules
 if command -v netfilter-persistent &> /dev/null; then
     netfilter-persistent save 2>/dev/null
 elif command -v iptables-save &> /dev/null; then
@@ -315,27 +302,19 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
     }
     
     /**
-     * Получает текущую скорость сети (байт/сек)
+     * Get current network speed (bytes/sec)
      */
     async getNetworkSpeed() {
         try {
-            // Читаем /proc/net/dev дважды с интервалом 1 сек
             const getNetStats = async () => {
                 const result = await this.exec(`cat /proc/net/dev | grep -E '(eth|ens|enp|eno)' | head -1`);
                 const line = result.stdout.trim();
                 
                 if (!line) return null;
                 
-                // Формат /proc/net/dev:
-                // eth0: 12345678 123 0 0 0 0 0 0 87654321 123 0 0 0 0 0 0
-                //       RX bytes                    TX bytes
-                
-                // Убираем название интерфейса и двоеточие
                 const data = line.replace(/^[^:]+:\s*/, '');
                 const parts = data.trim().split(/\s+/);
                 
-                // RX: bytes (0), packets (1), errs (2)...
-                // TX: bytes (8), packets (9), errs (10)...
                 const rxBytes = parseInt(parts[0]) || 0;
                 const txBytes = parseInt(parts[8]) || 0;
                 
@@ -347,7 +326,6 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
                 return { success: false, error: 'Network interface not found' };
             }
             
-            // Ждем 1 секунду
             await new Promise(resolve => setTimeout(resolve, 1000));
             
             const stats2 = await getNetStats();
@@ -355,15 +333,14 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
                 return { success: false, error: 'Network interface not found' };
             }
             
-            // Вычисляем скорость (байт/сек)
-            const timeDiff = (stats2.time - stats1.time) / 1000; // секунды
+            const timeDiff = (stats2.time - stats1.time) / 1000;
             const rxSpeed = Math.round((stats2.rx - stats1.rx) / timeDiff);
             const txSpeed = Math.round((stats2.tx - stats1.tx) / timeDiff);
             
             return { 
                 success: true, 
-                rx: rxSpeed,  // байт/сек (download)
-                tx: txSpeed,  // байт/сек (upload)
+                rx: rxSpeed,
+                tx: txSpeed,
             };
         } catch (error) {
             logger.error(`[SSH] Network speed error on ${this.node.name}: ${error.message}`);
@@ -372,11 +349,10 @@ echo "Port hopping: ${startPort}-${endPort} -> ${mainPort}"
     }
     
     /**
-     * Получает системную статистику ноды
+     * Get system stats from node
      */
     async getSystemStats() {
         try {
-            // Одной командой получаем всё нужное
             const result = await this.exec(`
 echo "===CPU==="
 cat /proc/loadavg

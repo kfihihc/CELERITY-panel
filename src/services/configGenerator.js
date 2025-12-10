@@ -1,23 +1,16 @@
 /**
- * Генератор конфигов для Hysteria 2 нод
- * Используем HTTP авторизацию вместо userpass
+ * Hysteria 2 config generator
  */
 
 const yaml = require('yaml');
 
 /**
- * Генерирует YAML конфиг для ноды Hysteria 2
- * 
- * @param {Object} node - Объект ноды из БД
- * @param {string} authUrl - URL для HTTP авторизации
- * @returns {string} YAML конфиг
+ * Generate YAML config for Hysteria 2 node
  */
 function generateNodeConfig(node, authUrl) {
     const config = {
-        // Слушаем на основном порту
         listen: `:${node.port}`,
         
-        // Sniffing для определения протокола
         sniff: {
             enable: true,
             timeout: '2s',
@@ -26,18 +19,16 @@ function generateNodeConfig(node, authUrl) {
             udpPorts: '443,80,53',
         },
         
-        // QUIC настройки для оптимизации
         quic: {
-            initStreamReceiveWindow: 8388608,      // 8MB
-            maxStreamReceiveWindow: 8388608,       // 8MB
-            initConnReceiveWindow: 20971520,       // 20MB
-            maxConnReceiveWindow: 20971520,        // 20MB
+            initStreamReceiveWindow: 8388608,
+            maxStreamReceiveWindow: 8388608,
+            initConnReceiveWindow: 20971520,
+            maxConnReceiveWindow: 20971520,
             maxIdleTimeout: '60s',
             maxIncomingStreams: 256,
             disablePathMTUDiscovery: false,
         },
         
-        // HTTP авторизация — запросы идут на наш бэкенд
         auth: {
             type: 'http',
             http: {
@@ -46,10 +37,8 @@ function generateNodeConfig(node, authUrl) {
             },
         },
         
-        // Bandwidth - не ограничиваем на сервере, пусть клиент сам выбирает
         ignoreClientBandwidth: false,
         
-        // Маскировка под обычный HTTPS сервер (проксируем на Google)
         masquerade: {
             type: 'proxy',
             proxy: {
@@ -58,7 +47,6 @@ function generateNodeConfig(node, authUrl) {
             },
         },
         
-        // ACL - блокируем Китай и приватные сети
         acl: {
             inline: [
                 'reject(geoip:cn)',
@@ -67,7 +55,6 @@ function generateNodeConfig(node, authUrl) {
         },
     };
     
-    // TLS: если есть домен — используем ACME, иначе файлы сертификатов
     if (node.domain) {
         config.acme = {
             domains: [node.domain],
@@ -82,7 +69,6 @@ function generateNodeConfig(node, authUrl) {
         };
     }
     
-    // API статистики (0.0.0.0 чтобы панель могла подключиться извне)
     if (node.statsPort && node.statsSecret) {
         config.trafficStats = {
             listen: `:${node.statsPort}`,
@@ -94,13 +80,12 @@ function generateNodeConfig(node, authUrl) {
 }
 
 /**
- * Генерирует конфиг с ACME (Let's Encrypt)
+ * Generate config with ACME (Let's Encrypt)
  */
 function generateNodeConfigACME(node, authUrl, domain, email) {
     const config = {
         listen: `:${node.port}`,
         
-        // ACME вместо TLS
         acme: {
             domains: [domain],
             email: email,
@@ -124,7 +109,6 @@ function generateNodeConfigACME(node, authUrl, domain, email) {
             disablePathMTUDiscovery: false,
         },
         
-        // HTTP авторизация
         auth: {
             type: 'http',
             http: {
@@ -161,10 +145,8 @@ function generateNodeConfigACME(node, authUrl, domain, email) {
     return yaml.stringify(config);
 }
 
-// generatePortHoppingScript удалён - используйте nodeSetup.js или nodeSSH.js
-
 /**
- * Генерирует systemd service файл для Hysteria
+ * Generate systemd service file for Hysteria
  */
 function generateSystemdService() {
     return `[Unit]

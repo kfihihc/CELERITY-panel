@@ -1,13 +1,12 @@
 /**
- * Сервис синхронизации нод Hysteria
+ * Hysteria nodes sync service
  * 
- * С HTTP авторизацией синхронизация пользователей НЕ НУЖНА!
- * Авторизация происходит в реалтайме через HTTP запросы к бэкенду.
+ * With HTTP auth, user sync is NOT needed - auth happens in realtime via HTTP.
  * 
- * Этот сервис нужен для:
- * - Обновления конфигов нод (если изменились настройки)
- * - Сбора статистики трафика
- * - Health check нод
+ * This service handles:
+ * - Node config updates
+ * - Traffic stats collection
+ * - Node health checks
  */
 
 const HyUser = require('../models/hyUserModel');
@@ -26,14 +25,14 @@ class SyncService {
     }
 
     /**
-     * Получает URL для HTTP авторизации
+     * Get HTTP auth URL
      */
     getAuthUrl() {
         return `${config.BASE_URL}/api/auth`;
     }
 
     /**
-     * Обновляет конфиг на конкретной ноде
+     * Update config on a specific node
      */
     async updateNodeConfig(node) {
         logger.info(`[Sync] Updating config for node ${node.name} (${node.ip})`);
@@ -48,11 +47,11 @@ class SyncService {
         try {
             await ssh.connect();
             
-            // Используем кастомный конфиг или генерируем автоматически
+            // Use custom config or generate automatically
             let configContent;
             const customConfig = (node.customConfig || '').trim();
             if (node.useCustomConfig && customConfig && customConfig.length > 50) {
-                // Базовая валидация: должен содержать listen и auth/tls/acme
+                // Basic validation: must contain listen and auth/tls/acme
                 if (!customConfig.includes('listen:')) {
                     throw new Error('Custom config invalid: missing listen:');
                 }
@@ -69,7 +68,7 @@ class SyncService {
                 configContent = configGenerator.generateNodeConfig(node, authUrl);
             }
             
-            // Обновляем конфиг на ноде
+            // Update config on node
             const success = await ssh.updateConfig(configContent);
             
             if (success) {
@@ -86,13 +85,13 @@ class SyncService {
                     }
                 );
                 
-                logger.info(`[Sync] ✅ Node ${node.name}: config updated`);
+                logger.info(`[Sync] Node ${node.name}: config updated`);
                 return true;
             } else {
                 throw new Error('Failed to update config');
             }
         } catch (error) {
-            logger.error(`[Sync] ❌ Node ${node.name} error: ${error.message}`);
+            logger.error(`[Sync] Node ${node.name} error: ${error.message}`);
             await HyNode.updateOne(
                 { _id: node._id },
                 { $set: { status: 'error', lastError: error.message } }
@@ -104,7 +103,7 @@ class SyncService {
     }
 
     /**
-     * Обновляет конфиги на всех активных нодах (параллельно, до 5 одновременно)
+     * Update configs on all active nodes (parallel, up to 5 concurrent)
      */
     async syncAllNodes() {
         if (this.isSyncing) {
@@ -118,7 +117,7 @@ class SyncService {
         try {
             const nodes = await HyNode.find({ active: true });
             
-            // Параллельная синхронизация с ограничением concurrency
+            // Parallel sync with concurrency limit
             const CONCURRENCY = 5;
             for (let i = 0; i < nodes.length; i += CONCURRENCY) {
                 const batch = nodes.slice(i, i + CONCURRENCY);
@@ -135,8 +134,8 @@ class SyncService {
     }
 
     /**
-     * Получает статистику трафика с ноды и обновляет пользователей
-     * Использует bulkWrite для оптимизации (99% меньше запросов к MongoDB)
+     * Collect traffic stats from node and update users
+     * Uses bulkWrite for optimization (99% fewer MongoDB queries)
      */
     async collectTrafficStats(node) {
         try {
@@ -153,11 +152,11 @@ class SyncService {
             
             const stats = response.data;
             
-            // Суммируем трафик ноды
+            // Sum node traffic
             let nodeTx = 0;
             let nodeRx = 0;
             
-            // Подготавливаем bulk операции для всех пользователей
+            // Prepare bulk operations for all users
             const bulkOps = [];
             const now = new Date();
             
@@ -179,13 +178,13 @@ class SyncService {
                 });
             }
             
-            // Выполняем bulk update (1 запрос вместо N)
+            // Execute bulk update (1 query instead of N)
             if (bulkOps.length > 0) {
                 const result = await HyUser.bulkWrite(bulkOps, { ordered: false });
                 logger.debug(`[Stats] ${node.name}: Bulk updated ${result.modifiedCount}/${bulkOps.length} users`);
             }
             
-            // Обновляем трафик ноды
+            // Update node traffic
             await HyNode.updateOne(
                 { _id: node._id },
                 {
@@ -204,11 +203,11 @@ class SyncService {
     }
 
     /**
-     * Получает онлайн пользователей с ноды
+     * Get online users from node
      */
     async getOnlineUsers(node) {
         try {
-            // Если Stats API не настроен - просто пропускаем, не меняем статус
+            // If Stats API not configured - skip, don't change status
             if (!node.statsPort || !node.statsSecret) {
                 logger.debug(`[Stats] ${node.name}: Stats API not configured, skipping`);
                 return 0;
@@ -233,11 +232,11 @@ class SyncService {
             }
             return online;
         } catch (error) {
-            // Логируем ошибку, но НЕ меняем статус на error
-            // Статус error должен ставиться только при реальных проблемах с нодой
+            // Log error but DON'T change status to error
+            // Error status should only be set for real node problems
             logger.warn(`[Stats] ${node.name}: Stats unavailable - ${error.message}`);
             
-            // Обновляем только lastError, статус не трогаем
+            // Update only lastError, don't touch status
             await HyNode.updateOne(
                 { _id: node._id },
                 { $set: { lastError: `Stats: ${error.message}` } }
@@ -247,7 +246,7 @@ class SyncService {
     }
 
     /**
-     * Кикает пользователя со всех нод
+     * Kick user from all nodes
      */
     async kickUser(userId) {
         const user = await HyUser.findOne({ userId }).populate('nodes', 'name ip statsPort statsSecret');
@@ -278,12 +277,12 @@ class SyncService {
     }
 
     /**
-     * Собирает статистику со всех нод (параллельно с ограничением concurrency)
+     * Collect stats from all nodes (parallel with concurrency limit)
      */
     async collectAllStats() {
         const nodes = await HyNode.find({ active: true });
         
-        // Параллельная обработка с ограничением concurrency
+        // Parallel processing with concurrency limit
         const CONCURRENCY = 5;
         for (let i = 0; i < nodes.length; i += CONCURRENCY) {
             const batch = nodes.slice(i, i + CONCURRENCY);
@@ -295,20 +294,20 @@ class SyncService {
             );
         }
         
-        // Обновляем время последнего сбора статистики
+        // Update last stats collection time
         this.lastSyncTime = new Date();
         
-        // Инвалидируем кэш статистики трафика (данные обновились)
+        // Invalidate traffic stats cache (data updated)
         await cache.invalidateTrafficStats();
     }
 
     /**
-     * Проверяет здоровье всех нод (параллельно)
+     * Health check all nodes (parallel)
      */
     async healthCheck() {
         const nodes = await HyNode.find({ active: true });
         
-        // Параллельная проверка с ограничением concurrency
+        // Parallel check with concurrency limit
         const CONCURRENCY = 5;
         for (let i = 0; i < nodes.length; i += CONCURRENCY) {
             const batch = nodes.slice(i, i + CONCURRENCY);
@@ -319,7 +318,7 @@ class SyncService {
     }
 
     /**
-     * Настраивает port hopping на ноде
+     * Setup port hopping on node
      */
     async setupPortHopping(node) {
         const ssh = new NodeSSH(node);

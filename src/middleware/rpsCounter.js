@@ -1,25 +1,15 @@
 /**
- * Middleware для подсчета RPS/RPM
- * 
- * Оптимизирован для производительности:
- * - O(1) сложность
- * - Нет массивов/объектов
- * - Минимальное использование памяти (4 переменные)
+ * RPS/RPM counter middleware (O(1) complexity)
  */
 
-// Счетчики запросов
 let rpsCounter = 0;
 let rpmCounter = 0;
 let lastRpsReset = Date.now();
 let lastRpmReset = Date.now();
 
-/**
- * Middleware для подсчета запросов
- */
 function countRequest(req, res, next) {
     const now = Date.now();
     
-    // Сброс счетчика RPS каждую секунду
     if (now - lastRpsReset >= 1000) {
         rpsCounter = 1;
         lastRpsReset = now;
@@ -27,7 +17,6 @@ function countRequest(req, res, next) {
         rpsCounter++;
     }
     
-    // Сброс счетчика RPM каждую минуту
     if (now - lastRpmReset >= 60000) {
         rpmCounter = 1;
         lastRpmReset = now;
@@ -38,19 +27,10 @@ function countRequest(req, res, next) {
     next();
 }
 
-/**
- * Получить текущие значения RPS/RPM
- */
 function getStats() {
-    return {
-        rps: rpsCounter,
-        rpm: rpmCounter,
-    };
+    return { rps: rpsCounter, rpm: rpmCounter };
 }
 
-/**
- * Сбросить счетчики (для тестирования)
- */
 function reset() {
     rpsCounter = 0;
     rpmCounter = 0;
@@ -58,9 +38,5 @@ function reset() {
     lastRpmReset = Date.now();
 }
 
-module.exports = {
-    countRequest,
-    getStats,
-    reset,
-};
+module.exports = { countRequest, getStats, reset };
 

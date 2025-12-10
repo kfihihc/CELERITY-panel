@@ -1,6 +1,5 @@
 /**
- * Модель администратора панели
- * Логин и пароль хранятся в БД (пароль хешируется bcrypt)
+ * Admin model (bcrypt hashed password)
  */
 
 const mongoose = require('mongoose');
@@ -28,7 +27,6 @@ const adminSchema = new mongoose.Schema({
     },
 });
 
-// Статический метод: создать админа
 adminSchema.statics.createAdmin = async function(username, password) {
     const hash = await bcrypt.hash(password, 12);
     return this.create({
@@ -37,7 +35,6 @@ adminSchema.statics.createAdmin = async function(username, password) {
     });
 };
 
-// Статический метод: проверить пароль
 adminSchema.statics.verifyPassword = async function(username, password) {
     const admin = await this.findOne({ username: username.toLowerCase().trim() });
     if (!admin) return null;
@@ -45,20 +42,17 @@ adminSchema.statics.verifyPassword = async function(username, password) {
     const isValid = await bcrypt.compare(password, admin.passwordHash);
     if (!isValid) return null;
     
-    // Обновляем lastLogin
     admin.lastLogin = new Date();
     await admin.save();
     
     return admin;
 };
 
-// Статический метод: проверить есть ли хоть один админ
 adminSchema.statics.hasAdmin = async function() {
     const count = await this.countDocuments();
     return count > 0;
 };
 
-// Статический метод: изменить пароль
 adminSchema.statics.changePassword = async function(username, newPassword) {
     const hash = await bcrypt.hash(newPassword, 12);
     return this.findOneAndUpdate(
@@ -69,6 +63,7 @@ adminSchema.statics.changePassword = async function(username, newPassword) {
 };
 
 module.exports = mongoose.model('Admin', adminSchema);
+
 
 
 
