@@ -151,9 +151,18 @@ const render = (res, template, data = {}) => {
         }
     }
     
+    // Получаем i18n переменные из res.locals (установлены middleware)
+    const i18nVars = {
+        t: res.locals.t,
+        lang: res.locals.lang,
+        supportedLangs: res.locals.supportedLangs,
+        locales: res.locals.locales,
+    };
+    
     // Рендерим контент из кэшированного шаблона
     const content = compiledTemplate({ 
         ...data, 
+        ...i18nVars,
         baseUrl: config.BASE_URL, 
         config 
     });
@@ -161,6 +170,7 @@ const render = (res, template, data = {}) => {
     // Рендерим layout с контентом
     res.render('layout', {
         ...data,
+        ...i18nVars,
         content,
         baseUrl: config.BASE_URL,
         config,
