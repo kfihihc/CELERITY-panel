@@ -16,7 +16,8 @@ const mongoose = require('mongoose');
 
 // Статистика по ноде (компактная)
 const nodeStatSchema = new mongoose.Schema({
-    n: { type: String, required: true },      // name (сокращённо для экономии места)
+    i: { type: String, required: true },      // nodeId (уникальный идентификатор)
+    n: { type: String, required: true },      // name (для отображения)
     o: { type: Number, default: 0 },          // onlineUsers
     s: { type: String, default: 'offline' },  // status
 }, { _id: false });

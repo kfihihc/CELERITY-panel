@@ -65,8 +65,14 @@ class StatsService {
         try {
             // 1. Получаем ноды (один запрос)
             const nodes = await HyNode.find({ active: true })
-                .select('name onlineUsers status traffic')
+                .select('name domain onlineUsers status traffic')
                 .lean();
+            
+            // Определяем дубликаты имён
+            const nameCount = {};
+            for (const node of nodes) {
+                nameCount[node.name] = (nameCount[node.name] || 0) + 1;
+            }
             
             // 2. Агрегируем счётчики пользователей (один запрос вместо двух)
             const userStats = await HyUser.aggregate([
@@ -103,9 +109,15 @@ class StatsService {
                 
                 previousTraffic.set(nodeId, { tx: currTx, rx: currRx });
                 
-                // Компактный формат для хранения
+                // Компактный формат для хранения (с уникальным ID)
+                // Добавляем домен к имени если есть дубликаты
+                const displayName = nameCount[node.name] > 1 && node.domain
+                    ? `${node.name} (${node.domain.split('.')[0]})`
+                    : node.name;
+                
                 nodeStats.push({
-                    n: node.name,
+                    i: node._id.toString(),  // уникальный ID ноды
+                    n: displayName,
                     o: node.onlineUsers || 0,
                     s: node.status,
                 });
@@ -453,10 +465,12 @@ class StatsService {
             if (!snapshot.nodes) continue;
             
             for (const node of snapshot.nodes) {
-                if (!nodesMap.has(node.n)) {
-                    nodesMap.set(node.n, { name: node.n, data: [] });
+                // Используем ID для уникальности (поддержка старых данных без ID)
+                const nodeKey = node.i || node.n;
+                if (!nodesMap.has(nodeKey)) {
+                    nodesMap.set(nodeKey, { id: nodeKey, name: node.n, data: [] });
                 }
-                nodesMap.get(node.n).data.push({
+                nodesMap.get(nodeKey).data.push({
                     timestamp: snapshot.ts,
                     online: node.o,
                     status: node.s,
