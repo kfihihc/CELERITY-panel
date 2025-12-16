@@ -288,6 +288,7 @@ class CacheService {
 
     /**
      * Update timestamp for device IP
+     * Uses pipeline for better performance (1 RTT instead of 2)
      * @param {string} userId 
      * @param {string} ip 
      */
@@ -296,9 +297,10 @@ class CacheService {
         
         try {
             const key = `${PREFIX.DEVICES}${userId}`;
-            await this.redis.hset(key, ip, Date.now().toString());
-            // Set TTL on entire key (auto-cleanup inactive users)
-            await this.redis.expire(key, 86400); // 24 hours
+            await this.redis.pipeline()
+                .hset(key, ip, Date.now().toString())
+                .expire(key, 86400) // 24 hours TTL for auto-cleanup
+                .exec();
         } catch (err) {
             logger.error(`[Cache] updateDeviceIP error: ${err.message}`);
         }

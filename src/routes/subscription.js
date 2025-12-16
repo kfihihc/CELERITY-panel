@@ -82,19 +82,23 @@ async function getActiveNodesWithCache() {
 
 async function getActiveNodes(user) {
     let nodes = [];
+    let settings;
     
-    // Если у пользователя привязаны конкретные ноды
+    // Check if user has linked nodes
     if (user.nodes && user.nodes.length > 0) {
+        // User has linked nodes - only need settings
         nodes = user.nodes.filter(n => n && n.active);
+        settings = await getSettings();
         logger.debug(`[Sub] User ${user.userId}: ${nodes.length} linked active nodes`);
-    }
-    
-    // Если нод нет - берём по группам пользователя
-    if (nodes.length === 0) {
-        // Получаем все активные ноды из кэша
-        const allNodes = await getActiveNodesWithCache();
+    } else {
+        // No linked nodes - fetch nodes and settings in parallel for better performance
+        const [allNodes, loadedSettings] = await Promise.all([
+            getActiveNodesWithCache(),
+            getSettings()
+        ]);
+        settings = loadedSettings;
         
-        // Фильтруем по группам пользователя
+        // Filter by user groups
         const userGroupIds = (user.groups || []).map(g => g._id?.toString() || g.toString());
         nodes = allNodes.filter(n => {
             const nodeGroupIds = (n.groups || []).map(g => g._id?.toString() || g.toString());
@@ -104,8 +108,6 @@ async function getActiveNodes(user) {
         logger.debug(`[Sub] User ${user.userId}: ${nodes.length} nodes by groups`);
     }
     
-    // Получаем настройки из кэша
-    const settings = await getSettings();
     const lb = settings.loadBalancing || {};
     
     // Фильтрация перегруженных нод (если включено)

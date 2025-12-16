@@ -261,12 +261,18 @@ class StatsService {
         if (!cache.isConnected()) return;
         
         try {
-            const keys = await cache.redis.keys('stats:*');
+            // Use SCAN instead of KEYS for non-blocking key search
+            const keys = await cache._scanKeys('stats:*');
             if (keys.length > 0) {
-                await cache.redis.del(...keys);
+                // Delete in batches of 100 keys using UNLINK (non-blocking deletion)
+                const BATCH_SIZE = 100;
+                for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+                    const batch = keys.slice(i, i + BATCH_SIZE);
+                    await cache.redis.unlink(...batch);
+                }
             }
         } catch (e) {
-            // Ignore
+            // Ignore cache errors
         }
     }
     
