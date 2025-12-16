@@ -75,13 +75,19 @@ class StatsService {
                 if (node.status === 'online') nodesOnline++;
                 
                 const nodeId = node._id.toString();
-                const prev = previousTraffic.get(nodeId) || { tx: 0, rx: 0 };
                 const currTx = node.traffic?.tx || 0;
                 const currRx = node.traffic?.rx || 0;
                 
-                trafficTx += currTx >= prev.tx ? currTx - prev.tx : currTx;
-                trafficRx += currRx >= prev.rx ? currRx - prev.rx : currRx;
-                
+                // Only count delta if we have previous values (skip first run after restart)
+                if (previousTraffic.has(nodeId)) {
+                    const prev = previousTraffic.get(nodeId);
+                    // Delta calculation: if current >= prev, use delta; if reset detected, use current
+                    const deltaTx = currTx >= prev.tx ? currTx - prev.tx : currTx;
+                    const deltaRx = currRx >= prev.rx ? currRx - prev.rx : currRx;
+                    trafficTx += deltaTx;
+                    trafficRx += deltaRx;
+                }
+                // Always update previous values for next iteration
                 previousTraffic.set(nodeId, { tx: currTx, rx: currRx });
                 
                 const displayName = nameCount[node.name] > 1 && node.domain
