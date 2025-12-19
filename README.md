@@ -12,6 +12,12 @@
 
 **C³ CELERITY** by Click Connect — modern web panel for managing [Hysteria 2](https://v2.hysteria.network/) proxy servers with centralized HTTP authentication, one-click node setup, and flexible user-to-server group mapping.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bc04b654-aad1-4dc7-96fb-3f35df114eaf" alt="C³ CELERITY Dashboard" width="800">
+  <br>
+  <em>Dashboard — real-time server monitoring and statistics</em>
+</p>
+
 ## ⚡ Quick Start
 
 **1. Install Docker** (if not installed):

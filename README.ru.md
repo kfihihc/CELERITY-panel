@@ -12,6 +12,12 @@
 
 **C³ CELERITY** by Click Connect — современная веб-панель для управления серверами [Hysteria 2](https://v2.hysteria.network/) с централизованной HTTP-авторизацией, автоматической настройкой нод и гибким распределением пользователей по группам.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bc04b654-aad1-4dc7-96fb-3f35df114eaf" alt="C³ CELERITY Dashboard" width="800">
+  <br>
+  <em>Дашборд — мониторинг серверов и статистика в реальном времени</em>
+</p>
+
 ## ⚡ Быстрый старт
 
 **1. Установите Docker** (если не установлен):
