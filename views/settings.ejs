@@ -120,7 +120,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2>⚖️ <%= t('settings.loadBalancing') %></h2>
+                        <h2><%= t('settings.loadBalancing') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-list">
@@ -149,7 +149,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2>📱 <%= t('settings.deviceLimit') %> & <%= t('settings.rateLimiting') %></h2>
+                        <h2><%= t('settings.deviceLimit') %> & <%= t('settings.rateLimiting') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-grid">
@@ -176,7 +176,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2>🚀 <%= t('settings.caching') %></h2>
+                        <h2><%= t('settings.caching') %></h2>
                     </div>
                     <div class="card-body">
                         <div class="settings-grid">
@@ -212,7 +212,7 @@
             <div class="col-6">
                 <div class="card">
                     <div class="card-header">
-                        <h2>🔗 <%= t('settings.sshPool') %></h2>
+                        <h2><%= t('settings.sshPool') %></h2>
                     </div>
                     <div class="card-body">
                         <label class="checkbox-label" style="margin-bottom: 0.75rem;">
@@ -248,8 +248,10 @@
         </div>
         
         <!-- Save Button -->
-        <div style="padding: 1rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border);">
-            <button type="submit" class="btn btn-primary"><%= t('settings.saveAllSettings') %></button>
+        <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 15px;">
+                💾 <%= t('settings.saveAllSettings') %>
+            </button>
         </div>
     </form>
 </div>
