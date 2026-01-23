@@ -169,8 +169,14 @@
         <!-- Logs -->
         <div class="card mt-2">
             <div class="card-header">
-                <h2><%= t('dashboard.recentLogs') %></h2>
-                <button class="btn btn-sm" onclick="refreshLogs()"><%= t('common.refresh') %></button>
+                <h2>
+                    <span class="logs-status-dot" id="logsStatusDot"></span>
+                    <%= t('dashboard.recentLogs') %>
+                </h2>
+                <div class="logs-controls">
+                    <button class="btn btn-sm" id="logsToggleBtn" onclick="toggleLogs()" title="<%= t('dashboard.pauseLogs') %>">⏸️</button>
+                    <button class="btn btn-sm" onclick="clearLogs()" title="<%= t('common.clear') %>">🗑️</button>
+                </div>
             </div>
             <div class="card-body no-padding">
                 <div class="logs-container" id="logsContainer">
@@ -196,10 +202,10 @@
                         <span class="qa-icon">👤</span>
                         <span class="qa-text"><%= t('dashboard.addUser') %></span>
                     </a>
-                    <button class="quick-action" onclick="syncAll()">
-                        <span class="qa-icon">🔄</span>
-                        <span class="qa-text"><%= t('common.sync') %></span>
-                    </button>
+                    <a href="/panel/stats" class="quick-action">
+                        <span class="qa-icon">📊</span>
+                        <span class="qa-text"><%= t('nav.stats') %></span>
+                    </a>
                     <button class="quick-action" onclick="createBackup()">
                         <span class="qa-icon">💾</span>
                         <span class="qa-text"><%= t('dashboard.backupDb') %></span>
@@ -264,6 +270,36 @@
 <div id="toast" class="toast"></div>
 
 <style>
+/* Real-time logs status indicator */
+.logs-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background: var(--text-muted);
+}
+.logs-status-dot.connecting {
+    background: var(--warning);
+    animation: pulse 1s infinite;
+}
+.logs-status-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+.logs-status-dot.disconnected,
+.logs-status-dot.error {
+    background: var(--danger);
+}
+.logs-controls {
+    display: flex;
+    gap: 8px;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .progress-bar-wrap {
     width: 60px;
     height: 6px;
@@ -312,8 +348,6 @@
 const i18n = {
     noLogs: <%- JSON.stringify(t("dashboard.noLogs")) %>,
     loadError: <%- JSON.stringify(t("dashboard.loadError")) %>,
-    syncStarted: <%- JSON.stringify(t("dashboard.syncStarted")) %>,
-    syncSuccess: <%- JSON.stringify(t("dashboard.syncSuccess")) %>,
     error: <%- JSON.stringify(t("common.error")) %>,
     nodeRestarted: <%- JSON.stringify(t("dashboard.nodeRestarted")) %>,
     restartError: <%- JSON.stringify(t("dashboard.restartError")) %>,
@@ -325,41 +359,115 @@ const i18n = {
     restoreConfirm: <%- JSON.stringify(t("dashboard.restoreConfirm")) %>
 };
 
+// Logs WebSocket
+let logsWs = null;
+let logsPaused = false;
+let logsAutoScroll = true;
+
 // Load on page load
 document.addEventListener('DOMContentLoaded', () => {
-    refreshLogs();
+    connectLogsWebSocket();
     loadSystemStats();
     loadNodesStats();
     loadNodesSpeed();
 });
 
-async function refreshLogs() {
-    try {
-        const res = await fetch('/panel/logs', { credentials: 'include' });
-        const data = await res.json();
+function connectLogsWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
+    
+    updateLogsStatus('connecting');
+    
+    logsWs = new WebSocket(wsUrl);
+    
+    logsWs.onopen = () => {
+        updateLogsStatus('connected');
+    };
+    
+    logsWs.onmessage = (event) => {
+        if (logsPaused) return;
         
-        const container = document.getElementById('logsContainer');
-        if (data.logs && data.logs.length > 0) {
-            container.innerHTML = data.logs.map(log => {
-                const isError = log.includes('error') || log.includes('Error') || log.includes('❌');
-                const isWarn = log.includes('warn') || log.includes('⚠');
-                const isSuccess = log.includes('✅') || log.includes('✓');
-                let cls = 'log-line';
-                if (isError) cls += ' log-error';
-                else if (isWarn) cls += ' log-warn';
-                else if (isSuccess) cls += ' log-success';
-                return `<div class="${cls}">${escapeHtml(log)}</div>`;
-            }).join('');
-        } else {
-            container.innerHTML = '<div class="logs-empty">' + i18n.noLogs + '</div>';
+        const msg = JSON.parse(event.data);
+        
+        if (msg.type === 'history') {
+            // Initial history load
+            const container = document.getElementById('logsContainer');
+            if (msg.logs && msg.logs.length > 0) {
+                container.innerHTML = msg.logs.map(log => formatLogLine(log)).join('');
+                scrollLogsToBottom();
+            } else {
+                container.innerHTML = '<div class="logs-empty">' + i18n.noLogs + '</div>';
+            }
+        } else if (msg.type === 'log') {
+            // New real-time log
+            appendLog(msg);
         }
-    } catch (e) {
-        document.getElementById('logsContainer').innerHTML = '<div class="logs-error">' + i18n.loadError + '</div>';
+    };
+    
+    logsWs.onclose = () => {
+        updateLogsStatus('disconnected');
+        // Reconnect after 3 seconds
+        setTimeout(connectLogsWebSocket, 3000);
+    };
+    
+    logsWs.onerror = () => {
+        updateLogsStatus('error');
+    };
+}
+
+function formatLogLine(log) {
+    const level = log.level || 'info';
+    const message = `${log.timestamp} [${level.toUpperCase()}]: ${log.message}`;
+    let cls = 'log-line';
+    if (level === 'error') cls += ' log-error';
+    else if (level === 'warn') cls += ' log-warn';
+    else if (message.includes('✅') || message.includes('✓')) cls += ' log-success';
+    return `<div class="${cls}">${escapeHtml(message)}</div>`;
+}
+
+function appendLog(log) {
+    const container = document.getElementById('logsContainer');
+    
+    // Remove "no logs" message if present
+    const emptyMsg = container.querySelector('.logs-empty');
+    if (emptyMsg) emptyMsg.remove();
+    
+    // Add new log at top (newest first)
+    const logHtml = formatLogLine(log);
+    container.insertAdjacentHTML('afterbegin', logHtml);
+    
+    // Keep only last 100 logs in DOM
+    const lines = container.querySelectorAll('.log-line');
+    if (lines.length > 100) {
+        lines[lines.length - 1].remove();
     }
 }
 
+function scrollLogsToBottom() {
+    if (logsAutoScroll) {
+        const container = document.getElementById('logsContainer');
+        container.scrollTop = 0; // Newest are at top
+    }
+}
+
+function updateLogsStatus(status) {
+    const dot = document.getElementById('logsStatusDot');
+    dot.className = 'logs-status-dot ' + status;
+}
+
+function toggleLogs() {
+    logsPaused = !logsPaused;
+    const btn = document.getElementById('logsToggleBtn');
+    btn.textContent = logsPaused ? '▶️' : '⏸️';
+    btn.title = logsPaused ? 'Resume' : 'Pause';
+}
+
+function clearLogs() {
+    document.getElementById('logsContainer').innerHTML = '<div class="logs-empty">' + i18n.noLogs + '</div>';
+}
+
 function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 async function loadSystemStats() {
@@ -531,16 +639,6 @@ async function loadNodesSpeed() {
 
 async function refreshStats() {
     location.reload();
-}
-
-async function syncAll() {
-    showToast(i18n.syncStarted);
-    try {
-        await fetch('/api/sync', { method: 'POST', credentials: 'include' });
-        showToast(i18n.syncSuccess);
-    } catch (e) {
-        showToast(i18n.error, 'error');
-    }
 }
 
 async function restartNode(nodeId) {

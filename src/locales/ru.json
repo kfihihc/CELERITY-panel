@@ -104,7 +104,11 @@
     "dbRestored": "✓ БД восстановлена! Перезагрузка...",
     "restoreConfirm": "Восстановить базу данных из \"{filename}\"?\n\n⚠️ Текущие данные будут заменены!",
     "backupDb": "Backup БД",
-    "restoreDb": "Restore БД"
+    "restoreDb": "Restore БД",
+    "pauseLogs": "Пауза",
+    "resumeLogs": "Продолжить",
+    "logsConnected": "Live",
+    "logsDisconnected": "Отключено"
   },
   "nodes": {
     "title": "Ноды",
@@ -192,7 +196,14 @@
     "off": "выкл",
     "deleteError": "Ошибка удаления",
     "restart": "Перезапустить",
-    "reconnect": "Переподключить"
+    "reconnect": "Переподключить",
+    "sshNotConfigured": "SSH не настроен. Для автонастройки и терминала нужны SSH-данные.",
+    "allStatuses": "Все статусы",
+    "statusOnline": "Онлайн",
+    "statusOffline": "Офлайн",
+    "statusError": "Ошибка",
+    "restartSuccess": "Нода перезапущена",
+    "restartFailed": "Ошибка перезапуска"
   },
   "users": {
     "title": "Пользователи",

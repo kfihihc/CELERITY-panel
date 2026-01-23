@@ -383,7 +383,8 @@ async function startServer() {
 }
 
 function setupWebSocketServer(server) {
-    const wss = new WebSocketServer({ noServer: true });
+    const wssTerminal = new WebSocketServer({ noServer: true });
+    const wssLogs = new WebSocketServer({ noServer: true });
     const sshTerminal = require('./src/services/sshTerminal');
     const HyNode = require('./src/models/hyNodeModel');
     const crypto = require('crypto');
@@ -391,27 +392,32 @@ function setupWebSocketServer(server) {
     
     server.on('upgrade', (request, socket, head) => {
         const pathname = request.url;
+        const cookies = cookie.parse(request.headers.cookie || '');
+        const sessionId = cookies['connect.sid'];
+        
+        // Auth check for all WebSocket connections
+        if (!sessionId) {
+            logger.warn(`[WS] Connection attempt without session: ${request.socket.remoteAddress}`);
+            socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+            socket.destroy();
+            return;
+        }
         
         if (pathname && pathname.startsWith('/ws/terminal/')) {
-            const cookies = cookie.parse(request.headers.cookie || '');
-            const sessionId = cookies['connect.sid'];
-            
-            if (!sessionId) {
-                logger.warn(`[WS] Connection attempt without session: ${request.socket.remoteAddress}`);
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
-                return;
-            }
-            
-            wss.handleUpgrade(request, socket, head, (ws) => {
-                wss.emit('connection', ws, request);
+            wssTerminal.handleUpgrade(request, socket, head, (ws) => {
+                wssTerminal.emit('connection', ws, request);
+            });
+        } else if (pathname === '/ws/logs') {
+            wssLogs.handleUpgrade(request, socket, head, (ws) => {
+                wssLogs.emit('connection', ws, request);
             });
         } else {
             socket.destroy();
         }
     });
     
-    wss.on('connection', async (ws, req) => {
+    // SSH Terminal WebSocket
+    wssTerminal.on('connection', async (ws, req) => {
         const urlParts = req.url.split('/');
         const nodeId = urlParts[urlParts.length - 1];
         const sessionId = crypto.randomUUID();
@@ -465,7 +471,34 @@ function setupWebSocketServer(server) {
         }
     });
     
-    logger.info('[WS] SSH terminal initialized');
+    // Real-time Logs WebSocket
+    wssLogs.on('connection', (ws) => {
+        logger.info(`[WS] Logs stream connected`);
+        
+        // Send recent logs buffer on connect
+        const recentLogs = logger.getRecentLogs();
+        ws.send(JSON.stringify({ type: 'history', logs: recentLogs }));
+        
+        // Subscribe to new logs
+        const onLog = (logEntry) => {
+            if (ws.readyState === 1) { // WebSocket.OPEN
+                ws.send(JSON.stringify({ type: 'log', ...logEntry }));
+            }
+        };
+        
+        logger.logEmitter.on('log', onLog);
+        
+        ws.on('close', () => {
+            logger.logEmitter.off('log', onLog);
+            logger.info(`[WS] Logs stream disconnected`);
+        });
+        
+        ws.on('error', () => {
+            logger.logEmitter.off('log', onLog);
+        });
+    });
+    
+    logger.info('[WS] WebSocket server initialized (terminal + logs)');
 }
 
 function setupCronJobs() {

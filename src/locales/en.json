@@ -104,7 +104,11 @@
     "dbRestored": "Database restored! Reloading...",
     "restoreConfirm": "Restore database from \"{filename}\"?\n\n⚠️ Current data will be replaced!",
     "backupDb": "Backup DB",
-    "restoreDb": "Restore DB"
+    "restoreDb": "Restore DB",
+    "pauseLogs": "Pause logs",
+    "resumeLogs": "Resume logs",
+    "logsConnected": "Live",
+    "logsDisconnected": "Disconnected"
   },
   "nodes": {
     "title": "Nodes",
@@ -192,7 +196,14 @@
     "off": "off",
     "deleteError": "Delete error",
     "restart": "Restart",
-    "reconnect": "Reconnect"
+    "reconnect": "Reconnect",
+    "sshNotConfigured": "SSH not configured. Auto-setup and terminal require SSH credentials.",
+    "allStatuses": "All Statuses",
+    "statusOnline": "Online",
+    "statusOffline": "Offline",
+    "statusError": "Error",
+    "restartSuccess": "Node restarted",
+    "restartFailed": "Restart failed"
   },
   "users": {
     "title": "Users",

@@ -1,96 +1,255 @@
-<div class="page-header">
+<div class="page-header sticky-header">
     <div class="page-header-left">
-        <span class="results-count"><%= t('common.total') %>: <%= nodes.length %></span>
+        <span class="results-count" id="resultsCount"><%= t('common.total') %>: <%= nodes.length %></span>
     </div>
-    <a href="/panel/nodes/add" class="btn btn-primary">+ <%= t('nodes.addNode') %></a>
+    <div class="page-header-center">
+        <div class="filters-bar">
+            <select id="filterStatus" class="filter-select" onchange="applyFilters()">
+                <option value=""><%= t('nodes.allStatuses') %></option>
+                <option value="online"><%= t('nodes.statusOnline') %></option>
+                <option value="offline"><%= t('nodes.statusOffline') %></option>
+                <option value="error"><%= t('nodes.statusError') %></option>
+            </select>
+            <select id="filterGroup" class="filter-select" onchange="applyFilters()">
+                <option value=""><%= t('users.allGroups') %></option>
+                <% if (groups) { groups.forEach(group => { %>
+                <option value="<%= group._id %>"><%= group.name %></option>
+                <% }); } %>
+            </select>
+        </div>
+    </div>
+    <div class="page-header-right">
+        <a href="/panel/nodes/add" class="btn btn-primary">+ <%= t('nodes.addNode') %></a>
+    </div>
 </div>
 
 <div class="card">
     <div class="card-body no-padding">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th><%= t('common.name') %></th>
-                    <th><%= t('common.server') %></th>
-                    <th><%= t('common.ports') %></th>
-                    <th><%= t('common.status') %></th>
-                    <th><%= t('common.online') %></th>
-                    <th><%= t('nodes.groups') %></th>
-                    <th><%= t('common.actions') %></th>
-                </tr>
-            </thead>
-            <tbody>
-                <% if (nodes.length === 0) { %>
-                <tr>
-                    <td colspan="7" class="text-center text-muted">
-                        <div class="empty-state">
-                            <span class="empty-icon">🖥️</span>
-                            <p><%= t('nodes.noNodes') %></p>
-                            <a href="/panel/nodes/add" class="btn btn-primary"><%= t('nodes.addFirstNode') %></a>
+        <div class="table-wrapper">
+            <table class="table" id="nodesTable">
+                <thead>
+                    <tr>
+                        <th><%= t('common.name') %></th>
+                        <th><%= t('common.server') %></th>
+                        <th><%= t('common.ports') %></th>
+                        <th><%= t('common.status') %></th>
+                        <th><%= t('common.online') %></th>
+                        <th><%= t('nodes.groups') %></th>
+                        <th><%= t('common.actions') %></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (nodes.length === 0) { %>
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">
+                            <div class="empty-state">
+                                <span class="empty-icon">🖥️</span>
+                                <p><%= t('nodes.noNodes') %></p>
+                                <a href="/panel/nodes/add" class="btn btn-primary"><%= t('nodes.addFirstNode') %></a>
+                            </div>
+                        </td>
+                    </tr>
+                    <% } %>
+                    <% nodes.forEach(node => { 
+                        const groupIds = (node.groups || []).map(g => g._id?.toString() || g.toString()).join(',');
+                    %>
+                    <tr class="node-row" data-status="<%= node.status %>" data-groups="<%= groupIds %>" data-active="<%= node.active %>">
+                        <td>
+                            <div class="node-name-cell">
+                                <% if (node.flag) { %><span class="node-flag"><%= node.flag %></span><% } %>
+                                <div>
+                                    <strong><%= node.name %></strong>
+                                    <% if (node.domain) { %>
+                                    <br><small class="text-muted"><%= node.domain %></small>
+                                    <% } %>
+                                </div>
+                            </div>
+                        </td>
+                        <td><code><%= node.ip %></code></td>
+                        <td>
+                            <code><%= node.port %></code>
+                            <% if (node.portRange) { %>
+                            <br><small class="text-muted">hop: <%= node.portRange %></small>
+                            <% } %>
+                        </td>
+                        <td>
+                            <span class="badge badge-<%= node.status === 'online' ? 'success' : (node.status === 'error' ? 'danger' : 'warning') %>">
+                                <%= node.status %>
+                            </span>
+                            <% if (!node.active) { %>
+                            <span class="badge badge-secondary"><%= t('nodes.off') %></span>
+                            <% } %>
+                        </td>
+                        <td>
+                            <span class="<%= node.maxOnlineUsers && node.onlineUsers >= node.maxOnlineUsers ? 'text-danger' : '' %>">
+                                <%= node.onlineUsers || 0 %><% if (node.maxOnlineUsers) { %>/<%= node.maxOnlineUsers %><% } %>
+                            </span>
+                        </td>
+                        <td>
+                            <% if (node.groups && node.groups.length > 0) { %>
+                                <% node.groups.slice(0,2).forEach(group => { %>
+                                    <span class="group-tag-sm" style="background: <%= group.color %>20; border-color: <%= group.color %>; color: <%= group.color %>">
+                                        <%= group.name %>
+                                    </span>
+                                <% }); %>
+                                <% if (node.groups.length > 2) { %>
+                                    <span class="group-more">+<%= node.groups.length - 2 %></span>
+                                <% } %>
+                            <% } else { %>
+                                <span class="text-muted"><%= t('common.all') %></span>
+                            <% } %>
+                        </td>
+                        <td>
+                            <div class="node-actions">
+                                <button class="btn-icon" onclick="restartNode('<%= node._id %>')" title="<%= t('nodes.restart') %>" <%= !node.ssh?.password ? 'disabled' : '' %>>🔄</button>
+                                <a href="/panel/nodes/<%= node._id %>/terminal" class="btn-icon" title="<%= t('nodes.terminal') %>" <%= !node.ssh?.password ? 'style="pointer-events:none;opacity:0.5"' : '' %>>💻</a>
+                                <a href="/panel/nodes/<%= node._id %>" class="btn-icon" title="<%= t('common.edit') %>">⚙️</a>
+                                <button class="btn-icon btn-icon-danger" onclick="deleteNode('<%= node._id %>')" title="<%= t('common.delete') %>">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Mobile Cards -->
+        <div class="mobile-nodes-list">
+            <% if (nodes.length === 0) { %>
+                <div style="text-align: center; padding: 40px 20px;">
+                    <p style="color: var(--text-muted); margin-bottom: 16px;"><%= t('nodes.noNodes') %></p>
+                    <a href="/panel/nodes/add" class="btn btn-primary btn-sm"><%= t('nodes.addFirstNode') %></a>
+                </div>
+            <% } %>
+            <% nodes.forEach(node => { 
+                const groupIds = (node.groups || []).map(g => g._id?.toString() || g.toString()).join(',');
+            %>
+                <div class="mobile-node-card node-row-mobile" data-status="<%= node.status %>" data-groups="<%= groupIds %>">
+                    <div class="mobile-node-header">
+                        <div class="mobile-node-title">
+                            <% if (node.flag) { %><span><%= node.flag %></span><% } %>
+                            <strong><%= node.name %></strong>
+                            <code style="font-size: 11px;"><%= node.ip %></code>
                         </div>
-                    </td>
-                </tr>
-                <% } %>
-                <% nodes.forEach(node => { %>
-                <tr>
-                    <td>
-                        <strong><%= node.name %></strong>
-                        <% if (node.domain) { %>
-                        <br><small class="text-muted"><%= node.domain %></small>
-                        <% } %>
-                    </td>
-                    <td><code><%= node.ip %></code></td>
-                    <td>
-                        <code><%= node.port %></code>
-                        <% if (node.portRange) { %>
-                        <br><small class="text-muted">hop: <%= node.portRange %></small>
-                        <% } %>
-                    </td>
-                    <td>
                         <span class="badge badge-<%= node.status === 'online' ? 'success' : (node.status === 'error' ? 'danger' : 'warning') %>">
                             <%= node.status %>
                         </span>
-                        <% if (!node.active) { %>
-                        <span class="badge badge-secondary"><%= t('nodes.off') %></span>
-                        <% } %>
-                    </td>
-                    <td>
-                        <span class="<%= node.maxOnlineUsers && node.onlineUsers >= node.maxOnlineUsers ? 'text-danger' : '' %>">
-                            <%= node.onlineUsers || 0 %><% if (node.maxOnlineUsers) { %>/<%= node.maxOnlineUsers %><% } %>
-                        </span>
-                    </td>
-                    <td>
-                        <% if (node.groups && node.groups.length > 0) { %>
-                            <% node.groups.slice(0,2).forEach(group => { %>
-                                <span class="group-tag-sm" style="background: <%= group.color %>20; border-color: <%= group.color %>; color: <%= group.color %>">
-                                    <%= group.name %>
-                                </span>
-                            <% }); %>
-                            <% if (node.groups.length > 2) { %>
-                                <span class="group-more">+<%= node.groups.length - 2 %></span>
-                            <% } %>
-                        <% } else { %>
-                            <span class="text-muted"><%= t('common.all') %></span>
-                        <% } %>
-                    </td>
-                    <td>
-                        <div class="btn-group">
-                            <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm"><%= t('common.edit') %></a>
-                            <button class="btn btn-sm btn-danger" onclick="deleteNode('<%= node._id %>')"><%= t('common.delete') %></button>
+                    </div>
+                    
+                    <div class="mobile-node-stats">
+                        <div class="mobile-stat-item">
+                            <span class="mobile-stat-label"><%= t('common.online') %></span>
+                            <span class="mobile-stat-value"><%= node.onlineUsers || 0 %><% if (node.maxOnlineUsers) { %>/<%= node.maxOnlineUsers %><% } %></span>
                         </div>
-                    </td>
-                </tr>
-                <% }); %>
-            </tbody>
-        </table>
+                        <div class="mobile-stat-item">
+                            <span class="mobile-stat-label"><%= t('common.ports') %></span>
+                            <span class="mobile-stat-value"><%= node.port %></span>
+                        </div>
+                    </div>
+                    
+                    <div class="mobile-node-actions">
+                        <button class="btn btn-sm" onclick="restartNode('<%= node._id %>')" <%= !node.ssh?.password ? 'disabled' : '' %>>🔄 <%= t('nodes.restart') %></button>
+                        <a href="/panel/nodes/<%= node._id %>" class="btn btn-sm" style="flex: 1;">⚙️ <%= t('common.edit') %></a>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
     </div>
 </div>
+
+<div id="toast" class="toast"></div>
+
+<style>
+.node-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.node-flag {
+    font-size: 20px;
+}
+.btn-icon-danger:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+}
+</style>
 
 <script>
 const i18n = {
     confirmDelete: <%- JSON.stringify(t("nodes.confirmDelete")) %>,
-    deleteError: <%- JSON.stringify(t("nodes.deleteError")) %>
+    deleteError: <%- JSON.stringify(t("nodes.deleteError")) %>,
+    restartSuccess: <%- JSON.stringify(t("nodes.restartSuccess")) %>,
+    restartFailed: <%- JSON.stringify(t("nodes.restartFailed")) %>,
+    total: <%- JSON.stringify(t("common.total")) %>
 };
+
+function applyFilters() {
+    const status = document.getElementById('filterStatus').value;
+    const group = document.getElementById('filterGroup').value;
+    
+    let visibleCount = 0;
+    
+    // Filter desktop table
+    document.querySelectorAll('.node-row').forEach(row => {
+        const rowStatus = row.dataset.status;
+        const rowGroups = row.dataset.groups || '';
+        
+        let show = true;
+        if (status && rowStatus !== status) show = false;
+        if (group && !rowGroups.includes(group)) show = false;
+        
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    // Filter mobile cards
+    document.querySelectorAll('.node-row-mobile').forEach(card => {
+        const cardStatus = card.dataset.status;
+        const cardGroups = card.dataset.groups || '';
+        
+        let show = true;
+        if (status && cardStatus !== status) show = false;
+        if (group && !cardGroups.includes(group)) show = false;
+        
+        card.style.display = show ? '' : 'none';
+    });
+    
+    // Update counter
+    document.getElementById('resultsCount').textContent = i18n.total + ': ' + visibleCount;
+}
+
+async function restartNode(id) {
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '⏳';
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch(`/panel/nodes/${id}/restart`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast(i18n.restartSuccess);
+            // Update status badge
+            const row = btn.closest('tr') || btn.closest('.mobile-node-card');
+            const badge = row.querySelector('.badge');
+            if (badge) {
+                badge.className = 'badge badge-success';
+                badge.textContent = 'online';
+            }
+        } else {
+            showToast(i18n.restartFailed + ': ' + (data.error || ''), 'error');
+        }
+    } catch (e) {
+        showToast(i18n.restartFailed, 'error');
+    }
+    
+    btn.textContent = originalText;
+    btn.disabled = false;
+}
 
 async function deleteNode(id) {
     if (!confirm(i18n.confirmDelete)) return;
@@ -103,7 +262,14 @@ async function deleteNode(id) {
     if (res.ok) {
         location.reload();
     } else {
-        alert(i18n.deleteError);
+        showToast(i18n.deleteError, 'error');
     }
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast show ' + type;
+    setTimeout(() => toast.className = 'toast', 3000);
 }
 </script>

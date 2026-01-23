@@ -1,5 +1,14 @@
 const winston = require('winston');
 const path = require('path');
+const EventEmitter = require('events');
+
+// Event emitter for real-time log streaming
+const logEmitter = new EventEmitter();
+logEmitter.setMaxListeners(100); // Allow many WebSocket connections
+
+// Buffer for recent logs (sent to new connections)
+const LOG_BUFFER_SIZE = 100;
+const logBuffer = [];
 
 const fileFormat = winston.format.combine(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -25,6 +34,28 @@ const consoleFormat = winston.format.combine(
     })
 );
 
+// Custom transport for real-time streaming
+class StreamTransport extends winston.Transport {
+    log(info, callback) {
+        const logEntry = {
+            timestamp: info.timestamp || new Date().toISOString(),
+            level: info.level,
+            message: info.stack || info.message
+        };
+        
+        // Add to buffer (circular)
+        logBuffer.push(logEntry);
+        if (logBuffer.length > LOG_BUFFER_SIZE) {
+            logBuffer.shift();
+        }
+        
+        // Emit for real-time listeners
+        logEmitter.emit('log', logEntry);
+        
+        callback();
+    }
+}
+
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
     transports: [
@@ -42,8 +73,18 @@ const logger = winston.createLogger({
             maxsize: 5242880,
             maxFiles: 5,
         }),
+        new StreamTransport({
+            format: winston.format.combine(
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+                winston.format.errors({ stack: true })
+            )
+        }),
     ],
 });
+
+// Export emitter and buffer for WebSocket handler
+logger.logEmitter = logEmitter;
+logger.getRecentLogs = () => [...logBuffer];
 
 module.exports = logger;
 
