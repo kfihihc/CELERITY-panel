@@ -1,5 +1,5 @@
 /**
- * Backup Service - автоматические бэкапы MongoDB с опциональной загрузкой в S3
+ * Backup Service - automatic MongoDB backups with optional S3 upload
  */
 
 const { exec } = require('child_process');
@@ -11,7 +11,7 @@ const logger = require('../utils/logger');
 
 const execAsync = promisify(exec);
 
-// Lazy-load S3 client (только если нужен)
+// Lazy-load S3 client (only when needed)
 let s3Client = null;
 
 function getS3Client(settings) {
@@ -25,7 +25,7 @@ function getS3Client(settings) {
                     accessKeyId: settings.backup.s3.accessKeyId,
                     secretAccessKey: settings.backup.s3.secretAccessKey,
                 },
-                forcePathStyle: !!settings.backup.s3.endpoint, // для MinIO и подобных
+                forcePathStyle: !!settings.backup.s3.endpoint, // for MinIO and similar
             });
         } catch (err) {
             logger.error(`[Backup] Failed to initialize S3 client: ${err.message}`);
@@ -36,12 +36,12 @@ function getS3Client(settings) {
 }
 
 /**
- * Создание бэкапа MongoDB
+ * Create a MongoDB backup
  */
 async function createBackup(settings) {
     const backupDir = path.join(__dirname, '../../backups');
     
-    // Создаём папку если нет
+    // Create the directory if it doesn't exist
     if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir, { recursive: true });
     }
@@ -52,34 +52,34 @@ async function createBackup(settings) {
     const archivePath = path.join(backupDir, `${backupName}.tar.gz`);
     
     try {
-        // Получаем MongoDB URI
+        // Get MongoDB URI
         const mongoUri = config.MONGO_URI;
         
-        // Выполняем mongodump
+        // Run mongodump
         logger.info(`[Backup] Starting backup: ${backupName}`);
         const dumpCmd = `mongodump --uri="${mongoUri}" --out="${backupPath}" --gzip`;
         await execAsync(dumpCmd);
         logger.info(`[Backup] Dump created: ${backupPath}`);
         
-        // Создаём tar архив
+        // Create tar archive
         const tarCmd = `cd "${backupDir}" && tar -czf "${backupName}.tar.gz" "${backupName}" && rm -rf "${backupName}"`;
         await execAsync(tarCmd);
         logger.info(`[Backup] Archive created: ${archivePath}`);
         
-        // Получаем размер файла
+        // Get file size
         const stats = fs.statSync(archivePath);
         const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
         
-        // Загружаем в S3 если настроено
+        // Upload to S3 if configured
         if (settings?.backup?.s3?.enabled) {
             await uploadToS3(archivePath, `${backupName}.tar.gz`, settings);
         }
         
-        // Ротация старых бэкапов
+        // Rotate old backups
         const keepLast = settings?.backup?.keepLast || 7;
         await rotateBackups(backupDir, keepLast);
         
-        // Обновляем время последнего бэкапа
+        // Update last backup time
         const Settings = require('../models/settingsModel');
         await Settings.update({ 'backup.lastBackup': new Date() });
         
@@ -96,7 +96,7 @@ async function createBackup(settings) {
     } catch (error) {
         logger.error(`[Backup] Error: ${error.message}`);
         
-        // Cleanup при ошибке
+        // Cleanup on error
         try {
             if (fs.existsSync(backupPath)) {
                 fs.rmSync(backupPath, { recursive: true });
@@ -108,7 +108,7 @@ async function createBackup(settings) {
 }
 
 /**
- * Загрузка файла в S3
+ * Upload a file to S3
  */
 async function uploadToS3(filePath, fileName, settings) {
     const client = getS3Client(settings);
@@ -138,19 +138,19 @@ async function uploadToS3(filePath, fileName, settings) {
         
         logger.info(`[Backup] Uploaded to S3: ${key}`);
         
-        // Ротация в S3 если настроена
+        // Rotate in S3 if configured
         if (settings.backup.s3.keepLast) {
             await rotateS3Backups(settings);
         }
         
     } catch (error) {
         logger.error(`[Backup] S3 upload error: ${error.message}`);
-        // Не прерываем - локальный бэкап всё равно создан
+        // Do not interrupt: local backup is still created
     }
 }
 
 /**
- * Ротация бэкапов в S3
+ * Rotate backups in S3
  */
 async function rotateS3Backups(settings) {
     const client = getS3Client(settings);
@@ -163,7 +163,7 @@ async function rotateS3Backups(settings) {
         const prefix = settings.backup.s3.prefix || 'backups';
         const keepLast = settings.backup.s3.keepLast || 7;
         
-        // Получаем список объектов
+        // Get the list of objects
         const listResult = await client.send(new ListObjectsV2Command({
             Bucket: bucket,
             Prefix: `${prefix}/hysteria-backup-`,
@@ -173,12 +173,12 @@ async function rotateS3Backups(settings) {
             return;
         }
         
-        // Сортируем по дате (старые первые)
+        // Sort by date (oldest first)
         const sorted = listResult.Contents
             .filter(obj => obj.Key.endsWith('.tar.gz'))
             .sort((a, b) => a.LastModified - b.LastModified);
         
-        // Удаляем лишние
+        // Delete extras
         const toDelete = sorted.slice(0, sorted.length - keepLast);
         
         for (const obj of toDelete) {
@@ -195,7 +195,7 @@ async function rotateS3Backups(settings) {
 }
 
 /**
- * Ротация локальных бэкапов
+ * Rotate local backups
  */
 async function rotateBackups(backupDir, keepLast) {
     try {
@@ -206,7 +206,7 @@ async function rotateBackups(backupDir, keepLast) {
                 path: path.join(backupDir, f),
                 mtime: fs.statSync(path.join(backupDir, f)).mtime,
             }))
-            .sort((a, b) => a.mtime - b.mtime); // старые первые
+            .sort((a, b) => a.mtime - b.mtime); // oldest first
         
         if (files.length <= keepLast) {
             return;
@@ -227,7 +227,7 @@ async function rotateBackups(backupDir, keepLast) {
 }
 
 /**
- * Получить список локальных бэкапов
+ * Get the list of local backups
  */
 function listBackups() {
     const backupDir = path.join(__dirname, '../../backups');
@@ -249,11 +249,11 @@ function listBackups() {
                 created: stats.mtime,
             };
         })
-        .sort((a, b) => b.created - a.created); // новые первые
+        .sort((a, b) => b.created - a.created); // newest first
 }
 
 /**
- * Проверка, нужен ли бэкап
+ * Check whether a backup is needed
  */
 async function shouldRunBackup(settings) {
     if (!settings?.backup?.enabled) {
@@ -264,7 +264,7 @@ async function shouldRunBackup(settings) {
     const lastBackup = settings.backup.lastBackup;
     
     if (!lastBackup) {
-        return true; // Никогда не делали бэкап
+        return true; // No backups have been made yet
     }
     
     const hoursSinceLastBackup = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60);
@@ -273,7 +273,7 @@ async function shouldRunBackup(settings) {
 }
 
 /**
- * Запланированный бэкап (вызывается из cron)
+ * Scheduled backup (called from cron)
  */
 async function scheduledBackup() {
     try {
@@ -290,7 +290,7 @@ async function scheduledBackup() {
 }
 
 /**
- * Тест подключения к S3
+ * Test S3 connection
  */
 async function testS3Connection(s3Config) {
     try {
@@ -306,7 +306,7 @@ async function testS3Connection(s3Config) {
             forcePathStyle: !!s3Config.endpoint,
         });
         
-        // Проверяем доступ к bucket
+        // Check access to the bucket
         const { HeadBucketCommand } = require('@aws-sdk/client-s3');
         await client.send(new HeadBucketCommand({ Bucket: s3Config.bucket }));
         
@@ -321,7 +321,7 @@ async function testS3Connection(s3Config) {
 }
 
 /**
- * Получить список бэкапов из S3
+ * Get the list of backups from S3
  */
 async function listS3Backups(settings) {
     const client = getS3Client(settings);
@@ -354,7 +354,7 @@ async function listS3Backups(settings) {
                 created: obj.LastModified,
                 source: 's3',
             }))
-            .sort((a, b) => b.created - a.created); // новые первые
+            .sort((a, b) => b.created - a.created); // newest first
             
     } catch (error) {
         logger.error(`[Backup] List S3 backups error: ${error.message}`);
@@ -363,7 +363,7 @@ async function listS3Backups(settings) {
 }
 
 /**
- * Скачать бэкап из S3 для восстановления
+ * Download a backup from S3 for restore
  */
 async function downloadFromS3(settings, key) {
     const client = getS3Client(settings);
@@ -385,7 +385,7 @@ async function downloadFromS3(settings, key) {
         Key: key,
     }));
     
-    // Сохраняем во временный файл
+    // Save to a temporary file
     const writeStream = fs.createWriteStream(localPath);
     
     await new Promise((resolve, reject) => {
@@ -401,13 +401,13 @@ async function downloadFromS3(settings, key) {
 }
 
 /**
- * Восстановление из бэкапа (локального или S3)
+ * Restore from a backup (local or S3)
  */
 async function restoreBackup(settings, source, identifier) {
     let archivePath;
     let tempDownload = false;
     
-    // Получаем файл
+    // Get the file
     if (source === 's3') {
         archivePath = await downloadFromS3(settings, identifier);
         tempDownload = true;
@@ -421,14 +421,14 @@ async function restoreBackup(settings, source, identifier) {
     const extractDir = path.join('/tmp', `restore-${Date.now()}`);
     
     try {
-        // Создаём директорию для распаковки
+        // Create extraction directory
         fs.mkdirSync(extractDir, { recursive: true });
         
-        // Распаковываем архив
+        // Extract archive
         await execAsync(`tar -xzf "${archivePath}" -C "${extractDir}"`);
         logger.info(`[Restore] Archive extracted to ${extractDir}`);
         
-        // Ищем папку с дампом
+        // Find the dump folder
         const findDumpPath = (dir) => {
             const items = fs.readdirSync(dir);
             if (items.includes('hysteria') && fs.statSync(path.join(dir, 'hysteria')).isDirectory()) {
@@ -447,7 +447,7 @@ async function restoreBackup(settings, source, identifier) {
             throw new Error('Invalid backup: hysteria database folder not found');
         }
         
-        // Восстанавливаем
+        // Restore
         const mongoUri = config.MONGO_URI;
         const restoreCmd = `mongorestore --uri="${mongoUri}" --drop --gzip --db=hysteria "${hysteriaDir}"`;
         
@@ -458,15 +458,15 @@ async function restoreBackup(settings, source, identifier) {
         // Cleanup
         await execAsync(`rm -rf "${extractDir}"`);
         
-        // Удаляем скачанный файл из S3 если это был временный
+        // Delete downloaded file from S3 if it was temporary
         if (tempDownload) {
-            // Оставляем файл - он теперь и локальный бэкап
+            // Keep the file; it's now a local backup
         }
         
         return { success: true };
         
     } catch (error) {
-        // Cleanup при ошибке
+        // Cleanup on error
         try {
             await execAsync(`rm -rf "${extractDir}"`);
         } catch (e) {}
@@ -486,4 +486,3 @@ module.exports = {
     testS3Connection,
     rotateBackups,
 };
-

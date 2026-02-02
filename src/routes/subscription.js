@@ -1,11 +1,11 @@
 /**
- * API подписок Hysteria 2
+ * Hysteria 2 subscriptions API
  * 
- * Единый роут /api/files/:token:
- * - Браузер → HTML страница
- * - Приложение → подписка в нужном формате
+ * Single route /api/files/:token:
+ * - Browser → HTML page
+ * - Client → subscription in the required format
  * 
- * С кэшированием в Redis для высокой производительности
+ * Cached in Redis for high performance
  */
 
 const express = require('express');
@@ -20,7 +20,7 @@ const { getNodesByGroups, getSettings } = require('../utils/helpers');
 
 function detectFormat(userAgent) {
     const ua = (userAgent || '').toLowerCase();
-    // Shadowrocket лучше работает с base64 URI list
+    // Shadowrocket works better with a base64 URI list
     if (/shadowrocket/.test(ua)) return 'shadowrocket';
     if (/clash|stash|surge|loon/.test(ua)) return 'clash';
     // sing-box based clients: Hiddify, NekoBox, SFI/SFA/SFM/SFT, Karing
@@ -35,7 +35,7 @@ function isBrowser(req) {
 }
 
 async function getUserByToken(token) {
-    // Один запрос вместо двух (оптимизация)
+    // One query instead of two (optimization)
     const user = await HyUser.findOne({
         $or: [
             { subscriptionToken: token },
@@ -49,28 +49,28 @@ async function getUserByToken(token) {
 }
 
 /**
- * Получить название подписки для пользователя
- * Берётся subscriptionTitle первой группы или name группы
+ * Get the subscription title for a user
+ * Uses the first group's subscriptionTitle or group name
  */
 function getSubscriptionTitle(user) {
     if (!user.groups || user.groups.length === 0) {
         return 'Hysteria';
     }
     
-    // Берём первую группу
+    // Use the first group
     const group = user.groups[0];
     return group.subscriptionTitle || group.name || 'Hysteria';
 }
 
 /**
- * Кодирует название в base64 (как в Marzban)
+ * Encode the title in base64 (like in Marzban)
  */
 function encodeTitle(text) {
     return `base64:${Buffer.from(text).toString('base64')}`;
 }
 
 /**
- * Получить активные ноды (с кэшированием)
+ * Get active nodes (with caching)
  */
 async function getActiveNodesWithCache() {
     const cached = await cache.getActiveNodes();
@@ -111,7 +111,7 @@ async function getActiveNodes(user) {
     
     const lb = settings.loadBalancing || {};
     
-    // Фильтрация перегруженных нод (если включено)
+    // Filter overloaded nodes (if enabled)
     if (lb.hideOverloaded) {
         const beforeFilter = nodes.length;
         nodes = nodes.filter(n => {
@@ -123,7 +123,7 @@ async function getActiveNodes(user) {
         }
     }
     
-    // Логируем статусы нод (debug уровень для снижения нагрузки)
+    // Log node statuses (debug level to reduce load)
     if (nodes.length > 0) {
         const statuses = nodes.map(n => `${n.name}:${n.status}(${n.onlineUsers}/${n.maxOnlineUsers || '∞'})`).join(', ');
         logger.debug(`[Sub] Nodes for ${user.userId}: ${statuses}`);
@@ -131,13 +131,13 @@ async function getActiveNodes(user) {
         logger.warn(`[Sub] NO NODES for user ${user.userId}! Check: active=true, groups match`);
     }
     
-    // Сортировка: балансировка по нагрузке или по rankingCoefficient
+    // Sorting: load balancing or rankingCoefficient
     if (lb.enabled) {
-        // Сортируем по % загрузки (наименее загруженные первыми)
+        // Sort by load % (least loaded first)
         nodes.sort((a, b) => {
             const loadA = a.maxOnlineUsers ? a.onlineUsers / a.maxOnlineUsers : 0;
             const loadB = b.maxOnlineUsers ? b.onlineUsers / b.maxOnlineUsers : 0;
-            // При равной загрузке — по rankingCoefficient
+            // When load is similar, sort by rankingCoefficient
             if (Math.abs(loadA - loadB) < 0.1) {
                 return (a.rankingCoefficient || 1) - (b.rankingCoefficient || 1);
             }
@@ -185,7 +185,7 @@ function getNodeConfigs(node) {
         });
     } else {
         configs.push({ name: 'TLS', host, port: node.port || 443, portRange: '', sni, hasCert });
-        // Порт 80 убран (используется для ACME)
+        // Port 80 is removed (used for ACME)
         if (node.portRange) {
             configs.push({ name: 'Hopping', host, port: node.port || 443, portRange: node.portRange, sni, hasCert });
         }
@@ -197,7 +197,7 @@ function getNodeConfigs(node) {
 // ==================== URI GENERATION ====================
 
 function generateURI(user, node, config) {
-    // Auth содержит userId для идентификации на сервере
+    // Auth includes userId for server-side identification
     const auth = `${user.userId}:${user.password}`;
     const params = [];
     
@@ -300,7 +300,7 @@ function generateSingboxJSON(user, nodes) {
 // ==================== HTML PAGE ====================
 
 function generateHTML(user, nodes, token, baseUrl) {
-    // Собираем все конфиги
+    // Collect all configs
     const allConfigs = [];
     nodes.forEach(node => {
         getNodeConfigs(node).forEach(cfg => {
@@ -317,7 +317,7 @@ function generateHTML(user, nodes, token, baseUrl) {
     const trafficLimit = user.trafficLimit ? user.trafficLimit / (1024 * 1024 * 1024) : 0;
     const expireDate = user.expireAt ? new Date(user.expireAt).toLocaleDateString('ru-RU') : 'Бессрочно';
     
-    // Группируем по локациям
+    // Group by locations
     const locations = {};
     allConfigs.forEach(cfg => {
         if (!locations[cfg.location]) {
@@ -422,7 +422,7 @@ function generateHTML(user, nodes, token, baseUrl) {
     <div class="toast" id="toast">✓ Скопировано</div>
     
     <script>
-        // Все URI для копирования
+        // All URIs for copying
         const uris = ${JSON.stringify(allConfigs.map(c => c.uri))};
         
         function copyText(text, btn) {
@@ -430,7 +430,7 @@ function generateHTML(user, nodes, token, baseUrl) {
         }
         
         function copyUri(index, btn) {
-            // Находим правильный индекс
+            // Find the correct index
             const allBtns = document.querySelectorAll('.location-configs .copy-btn');
             let idx = 0;
             for (let i = 0; i < allBtns.length; i++) {
@@ -479,24 +479,24 @@ function generateHTML(user, nodes, token, baseUrl) {
 // ==================== MAIN ROUTE ====================
 
 /**
- * GET /files/:token - Единственный роут
- * - Браузер → HTML
- * - Приложение → подписка
+ * GET /files/:token - Single route
+ * - Browser → HTML
+ * - Client → subscription
  * 
- * С кэшированием готовых подписок в Redis
+ * With Redis caching for generated subscriptions
  */
 router.get('/files/:token', async (req, res) => {
     try {
         const token = req.params.token;
         const userAgent = req.headers['user-agent'] || 'unknown';
         
-        // Определяем формат
+        // Determine format
         let format = req.query.format;
         const browser = isBrowser(req);
         
-        // Для браузера без format — не кэшируем (HTML со свежими данными)
+        // For browser requests without format, do not cache (fresh HTML)
         if (browser && !format) {
-            // HTML страница — не кэшируем, показываем свежие данные
+            // HTML page: do not cache, return fresh data
             const user = await getUserByToken(token);
             
             if (!user) {
@@ -519,19 +519,19 @@ router.get('/files/:token', async (req, res) => {
             return res.type('text/html').send(generateHTML(user, nodes, token, baseUrl));
         }
         
-        // Для приложений — определяем формат и кэшируем
+        // For clients, determine format and cache
         if (!format) {
             format = detectFormat(userAgent);
         }
         
-        // Проверяем кэш
+        // Check cache
         const cached = await cache.getSubscription(token, format);
         if (cached) {
             logger.debug(`[Sub] Cache HIT: ${token}:${format}`);
             return sendCachedSubscription(res, cached, format, userAgent);
         }
         
-        // Кэша нет — генерируем
+        // Cache miss: generate
         logger.debug(`[Sub] Cache MISS: token=${token.substring(0,8)}..., format=${format}`);
         
         const user = await getUserByToken(token);
@@ -556,13 +556,13 @@ router.get('/files/:token', async (req, res) => {
         
         logger.debug(`[Sub] Serving ${nodes.length} nodes to user ${user.userId}`);
         
-        // Генерируем подписку
+        // Generate subscription
         const subscriptionData = generateSubscriptionData(user, nodes, format, userAgent);
         
-        // Сохраняем в кэш
+        // Save to cache
         await cache.setSubscription(token, format, subscriptionData);
         
-        // Отправляем
+        // Send response
         return sendCachedSubscription(res, subscriptionData, format, userAgent);
         
     } catch (error) {
@@ -572,7 +572,7 @@ router.get('/files/:token', async (req, res) => {
 });
 
 /**
- * Генерирует данные подписки для кэширования
+ * Generate subscription data for caching
  */
 function generateSubscriptionData(user, nodes, format, userAgent) {
     let content;
@@ -619,7 +619,7 @@ function generateSubscriptionData(user, nodes, format, userAgent) {
 }
 
 /**
- * Отправляет закэшированную подписку
+ * Send cached subscription
  */
 function sendCachedSubscription(res, data, format, userAgent) {
     let contentType = 'text/plain';

@@ -3,25 +3,24 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Устанавливаем системные зависимости (mongodump для бэкапов)
+# Install system dependencies (mongodump for backups)
 RUN apk add --no-cache mongodb-tools
 
-# Копируем зависимости
+# Copy dependencies
 COPY package*.json ./
 
-# Устанавливаем зависимости
+# Install dependencies
 RUN npm install --omit=dev
 
-# Копируем исходники
+# Copy source files
 COPY . .
 
-# Создаём директории для логов, сертификатов и бэкапов
+# Create directories for logs, certificates, and backups
 RUN mkdir -p logs greenlock.d/live greenlock.d/accounts backups && \
     chmod -R 755 greenlock.d backups
 
-# Порты
+# Ports
 EXPOSE 8444 80 443
 
-# Запуск
+# Start
 CMD ["node", "index.js"]
-

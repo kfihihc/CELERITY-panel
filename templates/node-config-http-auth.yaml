@@ -1,11 +1,11 @@
-# Шаблон конфига Hysteria 2 с HTTP авторизацией
+# Hysteria 2 config template with HTTP authentication
 # 
-# Переменные:
-#   {{PORT}} - основной порт (443)
-#   {{AUTH_URL}} - URL для HTTP авторизации (https://your-backend.com/api/auth)
-#   {{CERT_PATH}} - путь к сертификату
-#   {{KEY_PATH}} - путь к ключу
-#   {{STATS_SECRET}} - секрет для API статистики
+# Variables:
+#   {{PORT}} - main port (443)
+#   {{AUTH_URL}} - URL for HTTP authentication (https://your-backend.com/api/auth)
+#   {{CERT_PATH}} - path to certificate
+#   {{KEY_PATH}} - path to key
+#   {{STATS_SECRET}} - secret for the stats API
 
 listen: :{{PORT}}
 
@@ -15,7 +15,7 @@ tls:
   key: {{KEY_PATH}}
   sniGuard: strict
 
-# Sniffing для определения протокола
+# Sniffing to detect protocol
 sniff:
   enable: true
   timeout: 2s
@@ -23,7 +23,7 @@ sniff:
   tcpPorts: 80,443,8000-9000
   udpPorts: 443,80,53
 
-# QUIC настройки
+# QUIC settings
 quic:
   initStreamReceiveWindow: 8388608
   maxStreamReceiveWindow: 8388608
@@ -33,7 +33,7 @@ quic:
   maxIncomingStreams: 256
   disablePathMTUDiscovery: false
 
-# HTTP авторизация - запросы идут на бэкенд
+# HTTP authentication - requests go to the backend
 auth:
   type: http
   http:
@@ -43,7 +43,7 @@ auth:
 # Bandwidth
 ignoreClientBandwidth: false
 
-# Маскировка под Google
+# Masquerade as Google
 masquerade:
   type: proxy
   proxy:
@@ -56,11 +56,10 @@ acl:
     - reject(geoip:cn)
     - reject(geoip:private)
 
-# API статистики (для сбора трафика и kick)
+# Stats API (for traffic collection and kick)
 trafficStats:
   listen: 127.0.0.1:9999
   secret: {{STATS_SECRET}}
-
 
 
 

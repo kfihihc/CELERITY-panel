@@ -171,7 +171,7 @@ class SSHPool {
                     clearTimeout(timeout);
                     this.connections.delete(nodeId);
                     
-                    // Retry logic с exponential backoff
+                    // Retry logic with exponential backoff
                     if (retryCount < this.config.maxRetries) {
                         const delay = Math.pow(2, retryCount) * 500;
                         logger.warn(`[SSHPool] ${nodeName}: retry ${retryCount + 1}/${this.config.maxRetries} in ${delay}ms`);
@@ -414,4 +414,3 @@ class SSHPool {
 
 // Singleton (settings loaded from DB on first use)
 module.exports = new SSHPool();
-

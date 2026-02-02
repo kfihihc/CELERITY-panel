@@ -1,31 +1,31 @@
 /**
- * Нагрузочный тест Hysteria Panel
+ * Hysteria Panel load test
  * 
- * Запуск: node scripts/benchmark.js <BASE_URL> [AUTH_TOKEN] [SUB_TOKEN]
- * Пример: node scripts/benchmark.js https://panel.example.com
+ * Run: node scripts/benchmark.js <BASE_URL> [AUTH_TOKEN] [SUB_TOKEN]
+ * Example: node scripts/benchmark.js https://panel.example.com
  * 
- * Тестирует:
- * - /health - базовый health check
- * - /api/auth - авторизация (критический эндпоинт)
- * - /api/files/:token - подписки
+ * Tests:
+ * - /health - basic health check
+ * - /api/auth - authentication (critical endpoint)
+ * - /api/files/:token - subscriptions
  */
 
 const http = require('http');
 const https = require('https');
 
-// Конфигурация теста
+// Test configuration
 const CONFIG = {
-    // Количество запросов на каждый эндпоинт
+    // Number of requests per endpoint
     requestsPerEndpoint: 500,
     
-    // Параллельных запросов одновременно
+    // Concurrent requests at a time
     concurrency: 50,
     
-    // Таймаут запроса (мс)
+    // Request timeout (ms)
     timeout: 10000,
 };
 
-// Цвета для консоли
+// Console colors
 const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
@@ -41,7 +41,7 @@ function log(color, ...args) {
 }
 
 /**
- * Выполнить HTTP запрос и замерить время
+ * Perform an HTTP request and measure time
  */
 function makeRequest(url, options = {}) {
     return new Promise((resolve) => {
@@ -56,7 +56,7 @@ function makeRequest(url, options = {}) {
             method: options.method || 'GET',
             headers: options.headers || {},
             timeout: CONFIG.timeout,
-            rejectUnauthorized: false, // Для self-signed сертификатов
+            rejectUnauthorized: false, // For self-signed certificates
         };
         
         const req = client.request(reqOptions, (res) => {
@@ -98,7 +98,7 @@ function makeRequest(url, options = {}) {
 }
 
 /**
- * Запустить тест с параллельными запросами
+ * Run a test with parallel requests
  */
 async function runTest(name, url, options = {}) {
     log(colors.cyan, `\n📊 Тестирование: ${name}`);
@@ -108,7 +108,7 @@ async function runTest(name, url, options = {}) {
     const results = [];
     const startTime = Date.now();
     
-    // Запускаем запросы батчами по concurrency
+    // Run requests in batches based on concurrency
     for (let i = 0; i < CONFIG.requestsPerEndpoint; i += CONFIG.concurrency) {
         const batch = [];
         const batchSize = Math.min(CONFIG.concurrency, CONFIG.requestsPerEndpoint - i);
@@ -120,14 +120,14 @@ async function runTest(name, url, options = {}) {
         const batchResults = await Promise.all(batch);
         results.push(...batchResults);
         
-        // Прогресс
+        // Progress
         process.stdout.write(`\r   Прогресс: ${results.length}/${CONFIG.requestsPerEndpoint}`);
     }
     
     const totalTime = Date.now() - startTime;
-    console.log(); // Новая строка после прогресса
+    console.log(); // New line after progress
     
-    // Анализ результатов
+    // Analyze results
     const successful = results.filter(r => r.success);
     const failed = results.filter(r => !r.success);
     const times = successful.map(r => r.time).sort((a, b) => a - b);
@@ -155,7 +155,7 @@ async function runTest(name, url, options = {}) {
         p99: times[Math.floor(times.length * 0.99)],
     };
     
-    // Вывод результатов
+    // Output results
     const successColor = stats.successRate >= 99 ? colors.green : stats.successRate >= 90 ? colors.yellow : colors.red;
     log(successColor, `   ✅ Успешно: ${stats.successful}/${stats.total} (${stats.successRate}%)`);
     log(colors.magenta, `   ⚡ RPS: ${stats.rps} запросов/сек`);
@@ -171,27 +171,27 @@ async function runTest(name, url, options = {}) {
 }
 
 /**
- * Основная функция
+ * Main function
  */
 async function main() {
     const args = process.argv.slice(2);
     
     if (args.length < 1) {
         console.log(`
-Использование: node scripts/benchmark.js <BASE_URL> [SUB_TOKEN]
+Usage: node scripts/benchmark.js <BASE_URL> [SUB_TOKEN]
 
-Примеры:
+Examples:
   node scripts/benchmark.js https://panel.example.com
   node scripts/benchmark.js https://panel.example.com abc123def456
 
-Параметры:
-  BASE_URL   - URL панели (обязательно)
-  SUB_TOKEN  - Токен подписки для теста /api/files/:token (опционально)
+Parameters:
+  BASE_URL   - Panel URL (required)
+  SUB_TOKEN  - Subscription token for /api/files/:token test (optional)
 
-Тесты:
-  1. /health           - Health check (всегда)
-  2. /api/auth         - Авторизация с тестовым пользователем
-  3. /api/files/:token - Подписка (если указан SUB_TOKEN)
+Tests:
+  1. /health           - Health check (always)
+  2. /api/auth         - Authentication with a test user
+  3. /api/files/:token - Subscription (if SUB_TOKEN is provided)
 `);
         process.exit(1);
     }
@@ -206,14 +206,14 @@ async function main() {
     
     const allStats = [];
     
-    // Тест 1: Health check
+    // Test 1: Health check
     const healthStats = await runTest(
         'Health Check',
         `${baseUrl}/health`
     );
     if (healthStats) allStats.push(healthStats);
     
-    // Тест 2: Auth (с реальным пользователем)
+    // Test 2: Auth (with a real user)
     const authStats = await runTest(
         'Auth (POST /api/auth)',
         `${baseUrl}/api/auth`,
@@ -225,7 +225,7 @@ async function main() {
     );
     if (authStats) allStats.push(authStats);
     
-    // Тест 3: Подписка (если указан токен)
+    // Test 3: Subscription (if a token is provided)
     if (subToken) {
         const subStats = await runTest(
             'Subscription (GET /api/files/:token)',
@@ -239,7 +239,7 @@ async function main() {
         log(colors.yellow, '\n⚠️  Тест подписок пропущен (не указан SUB_TOKEN)');
     }
     
-    // Итоговая таблица
+    // Summary table
     if (allStats.length > 0) {
         log(colors.bright, '\n📋 ИТОГОВАЯ ТАБЛИЦА:');
         console.log('');
@@ -259,7 +259,7 @@ async function main() {
         
         console.log('└─────────────────────────────────┴─────────┴─────────┴─────────┴─────────┴─────────┘');
         
-        // Сохраняем результаты в файл
+        // Save results to a file
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const resultsFile = `benchmark-${timestamp}.json`;
         const fs = require('fs');
@@ -282,4 +282,3 @@ main().catch(err => {
     console.error('Ошибка:', err.message);
     process.exit(1);
 });
-

@@ -1,6 +1,6 @@
 // Hysteria Panel - Frontend JS
 
-// API Key для запросов
+// API key for requests
 window.API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 // Refresh stats on dashboard
@@ -83,7 +83,6 @@ document.querySelectorAll('[data-confirm]').forEach(el => {
 });
 
 console.log('⚡ Hysteria Panel loaded');
-
 
 
 
