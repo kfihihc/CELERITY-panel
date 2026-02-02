@@ -100,7 +100,7 @@ echo "=== [1/5] Checking Hysteria installation ==="
 
 if ! command -v hysteria &> /dev/null; then
     echo "Hysteria not found. Installing..."
-    bash <(curl -fsSL https://get.hy2.sh/)
+    ARCHITECTURE=amd64-avx bash <(curl -fsSL https://get.hy2.sh/)
     echo "Done: Hysteria installed"
 else
     echo "Done: Hysteria already installed"
