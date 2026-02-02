@@ -1,6 +1,6 @@
 /**
- * Роуты для веб-панели управления
- * SSR с EJS шаблонами
+ * Routes for the web admin panel
+ * SSR with EJS templates
  */
 
 const express = require('express');
@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const router = express.Router();
 
-// Multer для загрузки backup файлов
+// Multer for uploading backup files
 const backupUpload = multer({ 
     dest: '/tmp/backup-uploads/',
     limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max
@@ -43,13 +43,13 @@ const os = require('os');
 const rpsCounter = require('../middleware/rpsCounter');
 const statsService = require('../services/statsService');
 
-// Кэш скомпилированных шаблонов (для production)
+// Cache compiled templates (for production)
 const templateCache = new Map();
 
-// Rate limiter для защиты от brute-force
+// Rate limiter to protect against brute-force
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 5, // максимум 5 попыток
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // maximum 5 attempts
     message: 'Слишком много попыток входа. Попробуйте через 15 минут.',
     standardHeaders: true,
     legacyHeaders: false,
@@ -61,33 +61,33 @@ const loginLimiter = rateLimit({
     },
 });
 
-// Парсинг IP whitelist
+// Parse IP whitelist
 function parseIpWhitelist() {
     const whitelist = config.PANEL_IP_WHITELIST || '';
-    if (!whitelist.trim()) return null; // Пустой = разрешено всем
+    if (!whitelist.trim()) return null; // Empty = allow all
     return whitelist.split(',').map(ip => ip.trim()).filter(Boolean);
 }
 
-// Проверка IP в whitelist (поддержка CIDR)
+// Check IP in whitelist (CIDR supported)
 function isIpAllowed(clientIp, whitelist) {
     if (!whitelist || whitelist.length === 0) return true;
     
-    // Нормализуем IPv6-mapped IPv4
+    // Normalize IPv6-mapped IPv4
     const normalizedIp = clientIp.replace(/^::ffff:/, '');
     
     for (const entry of whitelist) {
         if (entry.includes('/')) {
-            // CIDR нотация
+            // CIDR notation
             if (isIpInCidr(normalizedIp, entry)) return true;
         } else {
-            // Точное совпадение
+            // Exact match
             if (normalizedIp === entry) return true;
         }
     }
     return false;
 }
 
-// Проверка IP в CIDR диапазоне
+// Check IP within CIDR range
 function isIpInCidr(ip, cidr) {
     const [range, bits] = cidr.split('/');
     const mask = parseInt(bits);
@@ -107,12 +107,12 @@ function ipToNum(ip) {
     return parts.reduce((acc, part) => (acc << 8) + parseInt(part), 0) >>> 0;
 }
 
-// Middleware: проверка IP whitelist
+// Middleware: IP whitelist check
 const checkIpWhitelist = (req, res, next) => {
     const whitelist = parseIpWhitelist();
-    if (!whitelist) return next(); // Нет whitelist - пропускаем всех
+    if (!whitelist) return next(); // No whitelist - allow all
     
-    // Получаем реальный IP (X-Forwarded-For от Caddy или прямой)
+    // Get the real IP (X-Forwarded-For from Caddy or direct)
     const forwardedFor = req.headers['x-forwarded-for'];
     const clientIp = forwardedFor 
         ? forwardedFor.split(',')[0].trim()
@@ -125,10 +125,10 @@ const checkIpWhitelist = (req, res, next) => {
     next();
 };
 
-// Применяем IP whitelist ко всем роутам панели
+// Apply IP whitelist to all panel routes
 router.use(checkIpWhitelist);
 
-// Middleware: проверка авторизации
+// Middleware: auth check
 const requireAuth = (req, res, next) => {
     if (!req.session || !req.session.authenticated) {
         return res.redirect('/panel/login');
@@ -136,11 +136,11 @@ const requireAuth = (req, res, next) => {
     next();
 };
 
-// Хелпер для рендера с layout (с кэшированием шаблонов)
+// Helper to render with layout (with template caching)
 const render = (res, template, data = {}) => {
     const isProduction = process.env.NODE_ENV === 'production';
     
-    // Получаем или компилируем шаблон
+    // Get or compile the template
     let compiledTemplate = templateCache.get(template);
     
     if (!compiledTemplate || !isProduction) {
@@ -152,7 +152,7 @@ const render = (res, template, data = {}) => {
         }
     }
     
-    // Получаем i18n переменные из res.locals (установлены middleware)
+    // Get i18n variables from res.locals (set by middleware)
     const i18nVars = {
         t: res.locals.t,
         lang: res.locals.lang,
@@ -160,7 +160,7 @@ const render = (res, template, data = {}) => {
         locales: res.locals.locales,
     };
     
-    // Рендерим контент из кэшированного шаблона
+    // Render content from the cached template
     const content = compiledTemplate({ 
         ...data, 
         ...i18nVars,
@@ -168,7 +168,7 @@ const render = (res, template, data = {}) => {
         config 
     });
     
-    // Рендерим layout с контентом
+    // Render layout with content
     res.render('layout', {
         ...data,
         ...i18nVars,
@@ -180,27 +180,27 @@ const render = (res, template, data = {}) => {
 
 // ==================== AUTH ====================
 
-// GET /panel/login - Логин или первичная регистрация
+// GET /panel/login - Login or initial registration
 router.get('/login', async (req, res) => {
     if (req.session && req.session.authenticated) {
         return res.redirect('/panel');
     }
     
-    // Проверяем есть ли админ в БД
+    // Check if an admin exists in the DB
     const hasAdmin = await Admin.hasAdmin();
     
     if (!hasAdmin) {
-        // Первый запуск - показываем форму регистрации
+        // First run: show registration form
         return res.render('setup', { error: null });
     }
     
     res.render('login', { error: null });
 });
 
-// POST /panel/setup - Первичная регистрация админа
+// POST /panel/setup - Initial admin registration
 router.post('/setup', async (req, res) => {
     try {
-        // Проверяем что админа ещё нет
+        // Check that no admin exists yet
         const hasAdmin = await Admin.hasAdmin();
         if (hasAdmin) {
             return res.redirect('/panel/login');
@@ -208,7 +208,7 @@ router.post('/setup', async (req, res) => {
         
         const { username, password, passwordConfirm } = req.body;
         
-        // Валидация
+        // Validation
         if (!username || username.length < 3) {
             return res.render('setup', { error: 'Логин должен быть минимум 3 символа' });
         }
@@ -219,12 +219,12 @@ router.post('/setup', async (req, res) => {
             return res.render('setup', { error: 'Пароли не совпадают' });
         }
         
-        // Создаём админа
+        // Create admin
         await Admin.createAdmin(username, password);
         
         logger.info(`[Panel] Administrator created: ${username}`);
         
-        // Авторизуем сразу
+        // Authenticate immediately
         req.session.authenticated = true;
         req.session.adminUsername = username.toLowerCase();
         
@@ -235,17 +235,17 @@ router.post('/setup', async (req, res) => {
     }
 });
 
-// POST /panel/login (с rate limiting)
+// POST /panel/login (with rate limiting)
 router.post('/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body;
     
-    // Проверяем есть ли админ в БД
+    // Check if an admin exists in the DB
     const hasAdmin = await Admin.hasAdmin();
     if (!hasAdmin) {
         return res.redirect('/panel/login');
     }
     
-    // Проверяем логин/пароль
+    // Verify username/password
     const admin = await Admin.verifyPassword(username, password);
     
     if (admin) {
@@ -274,11 +274,11 @@ router.get('/logout', (req, res) => {
 // GET /panel - Dashboard
 router.get('/', requireAuth, async (req, res) => {
     try {
-        // Получаем счётчики из кэша
+        // Get counters from cache
         let counts = await cache.getDashboardCounts();
         
         if (!counts) {
-            // Если кэша нет — запрашиваем из БД
+            // If cache is missing, query the DB
             const [trafficAgg, usersTotal, usersEnabled, nodesTotal, nodesOnline] = await Promise.all([
                 HyUser.aggregate([
                     { $group: { 
@@ -303,7 +303,7 @@ router.get('/', requireAuth, async (req, res) => {
                 trafficStats,
             };
             
-            // Сохраняем в кэш на 1 минуту
+            // Save to cache for 1 minute
             await cache.setDashboardCounts(counts);
         }
         
@@ -316,7 +316,7 @@ router.get('/', requireAuth, async (req, res) => {
         
         const totalOnline = nodes.reduce((sum, n) => sum + (n.onlineUsers || 0), 0);
         
-        // Общий трафик в байтах
+        // Total traffic in bytes
         const totalTrafficBytes = (trafficStats.tx || 0) + (trafficStats.rx || 0);
         
         render(res, 'dashboard', {
@@ -342,7 +342,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // ==================== NODES ====================
 
-// GET /panel/nodes - Список нод
+// GET /panel/nodes - List nodes
 router.get('/nodes', requireAuth, async (req, res) => {
     try {
         const [nodes, groups] = await Promise.all([
@@ -361,7 +361,7 @@ router.get('/nodes', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/add - Форма добавления ноды
+// GET /panel/nodes/add - Node creation form
 router.get('/nodes/add', requireAuth, async (req, res) => {
     const groups = await getActiveGroups();
     render(res, 'node-form', {
@@ -372,14 +372,14 @@ router.get('/nodes/add', requireAuth, async (req, res) => {
     });
 });
 
-// POST /panel/nodes - Создание ноды
+// POST /panel/nodes - Create node
 router.post('/nodes', requireAuth, async (req, res) => {
     try {
-        // Шифруем SSH пароль
+        // Encrypt SSH password
         const sshPassword = req.body['ssh.password'] || '';
         const encryptedPassword = sshPassword ? cryptoService.encrypt(sshPassword) : '';
         
-        // Группы (массив ID)
+        // Groups (ID array)
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
@@ -414,7 +414,7 @@ router.post('/nodes', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/:id - Редактирование ноды
+// GET /panel/nodes/:id - Edit node
 router.get('/nodes/:id', requireAuth, async (req, res) => {
     try {
         const [node, groups] = await Promise.all([
@@ -437,10 +437,10 @@ router.get('/nodes/:id', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/nodes/:id - Обновление ноды
+// POST /panel/nodes/:id - Update node
 router.post('/nodes/:id', requireAuth, async (req, res) => {
     try {
-        // Группы (массив ID)
+        // Groups (ID array)
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
@@ -466,7 +466,7 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
             'ssh.username': req.body['ssh.username'] || 'root',
         };
         
-        // Обновляем пароль только если указан (шифруем)
+        // Update password only if provided (encrypt)
         if (req.body['ssh.password']) {
             updates['ssh.password'] = cryptoService.encrypt(req.body['ssh.password']);
         }
@@ -478,7 +478,7 @@ router.post('/nodes/:id', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/nodes/:id/setup - Автонастройка ноды через SSH
+// POST /panel/nodes/:id/setup - Auto-setup node via SSH
 router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -491,7 +491,7 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'SSH данные не настроены' });
         }
         
-        // Запускаем настройку
+        // Start setup
         const result = await nodeSetup.setupNode(node, {
             installHysteria: true,
             setupPortHopping: true,
@@ -499,7 +499,7 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
         });
         
         if (result.success) {
-            // Обновляем статус
+            // Update status
             await HyNode.findByIdAndUpdate(req.params.id, { 
                 $set: { status: 'online', lastSync: new Date(), lastError: '' } 
             });
@@ -515,7 +515,7 @@ router.post('/nodes/:id/setup', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/:id/stats - Получение системной статистики ноды
+// GET /panel/nodes/:id/stats - Get node system stats
 router.get('/nodes/:id/stats', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -539,7 +539,7 @@ router.get('/nodes/:id/stats', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/:id/speed - Получение текущей скорости сети
+// GET /panel/nodes/:id/speed - Get current network speed
 router.get('/nodes/:id/speed', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -563,7 +563,7 @@ router.get('/nodes/:id/speed', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/:id/get-config - Получение текущего конфига с ноды
+// GET /panel/nodes/:id/get-config - Get current node config
 router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -591,7 +591,7 @@ router.get('/nodes/:id/get-config', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/nodes/:id/logs - Получение логов ноды
+// GET /panel/nodes/:id/logs - Get node logs
 router.get('/nodes/:id/logs', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -613,7 +613,7 @@ router.get('/nodes/:id/logs', requireAuth, async (req, res) => {
 
 // ==================== USERS ====================
 
-// GET /panel/users - Список пользователей (с поиском и сортировкой)
+// GET /panel/users - List users (with search and sorting)
 router.get('/users', requireAuth, async (req, res) => {
     try {
         const { enabled, group, page = 1, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
@@ -623,7 +623,7 @@ router.get('/users', requireAuth, async (req, res) => {
         if (enabled !== undefined) filter.enabled = enabled === 'true';
         if (group) filter.groups = group;
         
-        // Поиск по userId или username
+        // Search by userId or username
         if (search && search.trim()) {
             const searchRegex = new RegExp(search.trim(), 'i');
             filter.$or = [
@@ -635,7 +635,7 @@ router.get('/users', requireAuth, async (req, res) => {
         let users;
         const order = sortOrder === 'asc' ? 1 : -1;
         
-        // Если сортировка по трафику - используем aggregation
+        // If sorting by traffic, use aggregation
         if (sortBy === 'traffic') {
             const pipeline = [
                 { $match: filter },
@@ -654,7 +654,7 @@ router.get('/users', requireAuth, async (req, res) => {
                 { path: 'groups', select: 'name color' }
             ]);
         } else {
-            // Обычная сортировка
+            // Regular sorting
             let sortField = {};
             switch (sortBy) {
                 case 'userId':
@@ -703,7 +703,7 @@ router.get('/users', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/users/add - Форма создания пользователя
+// GET /panel/users/add - User creation form
 router.get('/users/add', requireAuth, async (req, res) => {
     const groups = await getActiveGroups();
     render(res, 'user-form', {
@@ -713,7 +713,7 @@ router.get('/users/add', requireAuth, async (req, res) => {
     });
 });
 
-// POST /panel/users - Создание пользователя
+// POST /panel/users - Create user
 router.post('/users', requireAuth, async (req, res) => {
     try {
         const { userId, username, trafficLimitGB, expireDays, enabled, maxDevices } = req.body;
@@ -722,16 +722,16 @@ router.post('/users', requireAuth, async (req, res) => {
             return res.status(400).send('userId обязателен');
         }
         
-        // Проверяем существование
+        // Check if user exists
         const existing = await HyUser.findOne({ userId });
         if (existing) {
             return res.status(409).send('Пользователь уже существует');
         }
         
-        // Генерируем пароль
+        // Generate password
         const password = cryptoService.generatePassword(userId);
         
-        // Группы (массив ID)
+        // Groups (ID array)
         let groups = [];
         if (req.body.groups) {
             groups = Array.isArray(req.body.groups) ? req.body.groups : [req.body.groups];
@@ -744,7 +744,7 @@ router.post('/users', requireAuth, async (req, res) => {
             expireAt.setDate(expireAt.getDate() + parseInt(expireDays));
         }
         
-        // Traffic limit в байтах
+        // Traffic limit in bytes
         const trafficLimit = trafficLimitGB ? parseInt(trafficLimitGB) * 1024 * 1024 * 1024 : 0;
         
         // Max devices (0 = use group limit, -1 = unlimited)
@@ -759,7 +759,7 @@ router.post('/users', requireAuth, async (req, res) => {
             trafficLimit,
             maxDevices: userMaxDevices,
             expireAt,
-            nodes: [], // Ноды автоматически по группам
+            nodes: [], // Nodes are assigned automatically by groups
         });
         
         res.redirect(`/panel/users/${userId}`);
@@ -768,7 +768,7 @@ router.post('/users', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/users/:userId - Детали пользователя
+// GET /panel/users/:userId - User details
 router.get('/users/:userId', requireAuth, async (req, res) => {
     try {
         const [user, allGroups] = await Promise.all([
@@ -795,12 +795,12 @@ router.get('/users/:userId', requireAuth, async (req, res) => {
 
 // ==================== GROUPS ====================
 
-// GET /panel/groups - Список групп
+// GET /panel/groups - List groups
 router.get('/groups', requireAuth, async (req, res) => {
     try {
         const groups = await ServerGroup.find().sort({ name: 1 });
         
-        // Считаем количество нод и пользователей в каждой группе
+        // Count nodes and users in each group
         const groupsWithCounts = await Promise.all(groups.map(async (group) => {
             const [nodesCount, usersCount] = await Promise.all([
                 HyNode.countDocuments({ groups: group._id }),
@@ -823,7 +823,7 @@ router.get('/groups', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/groups - Создать группу
+// POST /panel/groups - Create group
 router.post('/groups', requireAuth, async (req, res) => {
     try {
         const { name, description, color, maxDevices, subscriptionTitle } = req.body;
@@ -840,7 +840,7 @@ router.post('/groups', requireAuth, async (req, res) => {
             subscriptionTitle: subscriptionTitle?.trim() || '',
         });
         
-        // Инвалидируем кэш групп
+        // Invalidate group cache
         await invalidateGroupsCache();
         
         res.redirect('/panel/groups');
@@ -852,7 +852,7 @@ router.post('/groups', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/groups/:id - Обновить группу
+// POST /panel/groups/:id - Update group
 router.post('/groups/:id', requireAuth, async (req, res) => {
     try {
         const { name, description, color, active, maxDevices, subscriptionTitle } = req.body;
@@ -868,7 +868,7 @@ router.post('/groups/:id', requireAuth, async (req, res) => {
             }
         });
         
-        // Инвалидируем кэш групп
+        // Invalidate group cache
         await invalidateGroupsCache();
         
         res.redirect('/panel/groups');
@@ -877,17 +877,17 @@ router.post('/groups/:id', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/groups/:id/delete - Удалить группу
+// POST /panel/groups/:id/delete - Delete group
 router.post('/groups/:id/delete', requireAuth, async (req, res) => {
     try {
-        // Удаляем группу из всех нод и пользователей
+        // Remove group from all nodes and users
         await Promise.all([
             HyNode.updateMany({ groups: req.params.id }, { $pull: { groups: req.params.id } }),
             HyUser.updateMany({ groups: req.params.id }, { $pull: { groups: req.params.id } }),
             ServerGroup.findByIdAndDelete(req.params.id),
         ]);
         
-        // Инвалидируем кэш групп
+        // Invalidate group cache
         await invalidateGroupsCache();
         
         res.redirect('/panel/groups');
@@ -905,7 +905,7 @@ router.get('/settings', requireAuth, async (req, res) => {
         domain: config.PANEL_DOMAIN || null,
     };
     
-    // Получаем данные админа и настройки
+    // Get admin data and settings
     const [admin, settings] = await Promise.all([
         Admin.findOne({ username: req.session.adminUsername }),
         Settings.get(),
@@ -922,7 +922,7 @@ router.get('/settings', requireAuth, async (req, res) => {
     });
 });
 
-// POST /panel/settings - Сохранение настроек
+// POST /panel/settings - Save settings
 router.post('/settings', requireAuth, async (req, res) => {
     try {
         const { reloadSettings } = require('../../index');
@@ -949,7 +949,7 @@ router.post('/settings', requireAuth, async (req, res) => {
             'nodeAuth.insecure': req.body['nodeAuth.insecure'] === 'on',
         };
         
-        // Backup settings (если форма бэкапов)
+        // Backup settings (if backup form)
         if (req.body['_backupSettings'] || req.body['backup.enabled'] !== undefined) {
             updates['backup.enabled'] = req.body['backup.enabled'] === 'on';
             updates['backup.intervalHours'] = parseInt(req.body['backup.intervalHours']) || 24;
@@ -961,7 +961,7 @@ router.post('/settings', requireAuth, async (req, res) => {
             updates['backup.s3.bucket'] = req.body['backup.s3.bucket'] || '';
             updates['backup.s3.prefix'] = req.body['backup.s3.prefix'] || 'backups';
             updates['backup.s3.accessKeyId'] = req.body['backup.s3.accessKeyId'] || '';
-            // Secret key: только обновляем если введён новый
+            // Secret key: update only if a new one is provided
             if (req.body['backup.s3.secretAccessKey']) {
                 updates['backup.s3.secretAccessKey'] = req.body['backup.s3.secretAccessKey'];
             }
@@ -987,12 +987,12 @@ router.post('/settings', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/settings/password - Смена пароля
+// POST /panel/settings/password - Change password
 router.post('/settings/password', requireAuth, async (req, res) => {
     try {
         const { currentPassword, newPassword, confirmPassword } = req.body;
         
-        // Валидация
+        // Validation
         if (!currentPassword || !newPassword || !confirmPassword) {
             return res.redirect('/panel/settings?error=' + encodeURIComponent('Заполните все поля'));
         }
@@ -1005,13 +1005,13 @@ router.post('/settings/password', requireAuth, async (req, res) => {
             return res.redirect('/panel/settings?error=' + encodeURIComponent('Пароли не совпадают'));
         }
         
-        // Проверяем текущий пароль
+        // Check current password
         const admin = await Admin.verifyPassword(req.session.adminUsername, currentPassword);
         if (!admin) {
             return res.redirect('/panel/settings?error=' + encodeURIComponent('Неверный текущий пароль'));
         }
         
-        // Меняем пароль
+        // Change password
         await Admin.changePassword(req.session.adminUsername, newPassword);
         
         logger.info(`[Panel] Password changed for: ${req.session.adminUsername}`);
@@ -1023,10 +1023,10 @@ router.post('/settings/password', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/settings/reset-traffic - Сброс счетчика трафика для всех пользователей
+// POST /panel/settings/reset-traffic - Reset traffic counters for all users
 router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
     try {
-        // Сбрасываем трафик у всех пользователей
+        // Reset traffic for all users
         const result = await HyUser.updateMany(
             {},
             {
@@ -1040,7 +1040,7 @@ router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
         
         logger.warn(`[Panel] Traffic reset for ${result.modifiedCount} users by admin: ${req.session.adminUsername}`);
         
-        // Инвалидируем кэш всех пользователей
+        // Invalidate cache for all users
         const users = await HyUser.find({}).select('userId subscriptionToken').lean();
         for (const user of users) {
             await cache.invalidateUser(user.userId);
@@ -1049,7 +1049,7 @@ router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
             }
         }
         
-        // Инвалидируем статистику
+        // Invalidate stats
         await cache.invalidateDashboardCounts();
         await cache.invalidateTrafficStats();
         
@@ -1064,7 +1064,7 @@ router.post('/settings/reset-traffic', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/settings/reset-stats - Сброс статистики
+// POST /panel/settings/reset-stats - Reset statistics
 router.post('/settings/reset-stats', requireAuth, async (req, res) => {
     try {
         const StatsSnapshot = require('../models/statsSnapshotModel');
@@ -1072,7 +1072,7 @@ router.post('/settings/reset-stats', requireAuth, async (req, res) => {
         
         logger.warn(`[Panel] Stats reset: ${result.deletedCount} snapshots deleted by admin: ${req.session.adminUsername}`);
         
-        // Инвалидируем кэш статистики
+        // Invalidate stats cache
         const statsService = require('../services/statsService');
         await statsService.invalidateCache();
         
@@ -1104,7 +1104,7 @@ router.post('/settings/flush-cache', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/nodes/:id/restart - Перезапуск Hysteria на ноде
+// POST /panel/nodes/:id/restart - Restart Hysteria on node
 router.post('/nodes/:id/restart', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -1133,7 +1133,7 @@ router.post('/nodes/:id/restart', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/system-stats - Статистика системы панели
+// GET /panel/system-stats - Panel system stats
 router.get('/system-stats', requireAuth, async (req, res) => {
     try {
         const cpus = os.cpus();
@@ -1143,27 +1143,27 @@ router.get('/system-stats', requireAuth, async (req, res) => {
         const usedMem = totalMem - freeMem;
         const processMemory = process.memoryUsage();
         
-        // CPU в процентах - используем load average (мгновенно, без задержек!)
-        // load1 / cores * 100 = примерный % загрузки
+        // CPU percentage - use load average (instant, no delays!)
+        // load1 / cores * 100 = approximate load %
         const cpuPercent = Math.min(Math.round((loadAvg[0] / cpus.length) * 100), 100);
         
-        // RPS/RPM из счетчиков (O(1) операция!)
+        // RPS/RPM from counters (O(1) operation!)
         const requestStats = rpsCounter.getStats();
         const rps = requestStats.rps;
         const rpm = requestStats.rpm;
         
-        // Cache stats (Redis быстрый)
+        // Cache stats (Redis is fast)
         const cacheStats = await cache.getStats();
         
-        // Active connections - берем из кеша dashboard (уже есть!)
+        // Active connections - read from dashboard cache (already available!)
         let totalConnections = 0;
         const dashboardCounts = await cache.getDashboardCounts();
         if (dashboardCounts) {
-            // Если есть кеш - берем оттуда
+            // If cache exists, read from it
             const nodes = await HyNode.find({ active: true }).select('onlineUsers').lean();
             totalConnections = nodes.reduce((sum, n) => sum + (n.onlineUsers || 0), 0);
         } else {
-            // Если нет - быстрый подсчет без aggregate
+            // If not, quick count without aggregate
             const nodes = await HyNode.find({ active: true }).select('onlineUsers').lean();
             totalConnections = nodes.reduce((sum, n) => sum + (n.onlineUsers || 0), 0);
         }
@@ -1204,14 +1204,14 @@ router.get('/system-stats', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/logs - Последние логи приложения
+// GET /panel/logs - Latest application logs
 router.get('/logs', requireAuth, async (req, res) => {
     try {
         const logsDir = path.join(__dirname, '../../logs');
         let logs = [];
         
-        // Winston с maxFiles создаёт файлы combined1.log, combined2.log и т.д.
-        // Ищем все combined*.log файлы
+        // Winston with maxFiles creates combined1.log, combined2.log, etc.
+        // Find all combined*.log files
         if (fs.existsSync(logsDir)) {
             const files = fs.readdirSync(logsDir)
                 .filter(f => f.startsWith('combined') && f.endsWith('.log'))
@@ -1220,13 +1220,13 @@ router.get('/logs', requireAuth, async (req, res) => {
                     path: path.join(logsDir, f),
                     mtime: fs.statSync(path.join(logsDir, f)).mtime
                 }))
-                .sort((a, b) => b.mtime - a.mtime); // Сортируем по времени изменения
+                .sort((a, b) => b.mtime - a.mtime); // Sort by modification time
             
-            // Берём самый свежий файл
+            // Use the newest file
             if (files.length > 0) {
                 const latestFile = files[0].path;
                 const content = fs.readFileSync(latestFile, 'utf8');
-                // Берём последние 100 строк, новые сверху
+                // Take the last 100 lines, newest first
                 logs = content.split('\n').filter(Boolean).slice(-100).reverse();
             }
         }
@@ -1238,7 +1238,7 @@ router.get('/logs', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/backup - Backup MongoDB и скачать
+// POST /panel/backup - Backup MongoDB and download
 router.post('/backup', requireAuth, async (req, res) => {
     try {
         const backupDir = path.join(__dirname, '../../backups');
@@ -1258,14 +1258,14 @@ router.post('/backup', requireAuth, async (req, res) => {
         await execAsync(dumpCmd);
         logger.info(`[Backup] Dump created: ${backupPath}`);
         
-        // Создаём tar.gz архив
+        // Create tar.gz archive
         const tarCmd = `cd "${backupDir}" && tar -czf "${backupName}.tar.gz" "${backupName}" && rm -rf "${backupName}"`;
         await execAsync(tarCmd);
         logger.info(`[Backup] Archive created: ${archivePath}`);
         
-        // Отдаём файл на скачивание
+        // Send file for download
         res.download(archivePath, `${backupName}.tar.gz`, (err) => {
-            // Удаляем файл после скачивания (опционально, можно оставить)
+            // Delete the file after download (optional)
             // fs.unlinkSync(archivePath);
             if (err) {
                 logger.error(`[Backup] Send error: ${err.message}`);
@@ -1277,7 +1277,7 @@ router.post('/backup', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/restore - Восстановление из backup
+// POST /panel/restore - Restore from backup
 router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'Файл backup не загружен' });
@@ -1287,23 +1287,23 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
     const extractDir = path.join('/tmp', `restore-${Date.now()}`);
     
     try {
-        // Создаём директорию для распаковки
+        // Create extraction directory
         fs.mkdirSync(extractDir, { recursive: true });
         
-        // Распаковываем архив
+        // Extract archive
         await execAsync(`tar -xzf "${uploadedFile}" -C "${extractDir}"`);
         logger.info(`[Restore] Archive extracted to ${extractDir}`);
         
-        // Ищем папку с дампом (может быть вложенность hysteria-backup-xxx/hysteria/)
+        // Find the dump folder (may be hysteria-backup-xxx/hysteria/ nested)
         const findDumpPath = (dir) => {
             const items = fs.readdirSync(dir);
             
-            // Если есть папка hysteria - это и есть дамп базы
+            // If hysteria folder exists, it is the DB dump
             if (items.includes('hysteria') && fs.statSync(path.join(dir, 'hysteria')).isDirectory()) {
                 return dir;
             }
             
-            // Если одна папка - ищем внутри
+            // If there's only one folder, look inside
             if (items.length === 1 && fs.statSync(path.join(dir, items[0])).isDirectory()) {
                 return findDumpPath(path.join(dir, items[0]));
             }
@@ -1314,11 +1314,11 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
         const dumpPath = findDumpPath(extractDir);
         logger.info(`[Restore] Dump path: ${dumpPath}`);
         
-        // Проверяем что там есть папка hysteria
+        // Verify the hysteria folder exists
         const dumpContents = fs.readdirSync(dumpPath);
         logger.info(`[Restore] Dump contents: ${dumpContents.join(', ')}`);
         
-        // mongorestore - указываем путь к папке базы данных
+        // mongorestore - specify the database folder path
         const mongoUri = config.MONGO_URI;
         const hysteriaDir = path.join(dumpPath, 'hysteria');
         const restoreCmd = `mongorestore --uri="${mongoUri}" --drop --gzip --db=hysteria "${hysteriaDir}"`;
@@ -1332,7 +1332,7 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
         
         logger.info(`[Restore] Database restored successfully`);
         
-        // Удаляем временные файлы
+        // Delete temporary files
         fs.unlinkSync(uploadedFile);
         await execAsync(`rm -rf "${extractDir}"`);
         
@@ -1342,7 +1342,7 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
         if (error.stdout) logger.error(`[Restore] stdout: ${error.stdout}`);
         if (error.stderr) logger.error(`[Restore] stderr: ${error.stderr}`);
         
-        // Очищаем временные файлы
+        // Clean up temporary files
         try {
             if (fs.existsSync(uploadedFile)) fs.unlinkSync(uploadedFile);
             await execAsync(`rm -rf "${extractDir}"`);
@@ -1352,7 +1352,7 @@ router.post('/restore', requireAuth, backupUpload.single('backup'), async (req, 
     }
 });
 
-// GET /panel/nodes/:id/terminal - SSH терминал
+// GET /panel/nodes/:id/terminal - SSH terminal
 router.get('/nodes/:id/terminal', requireAuth, async (req, res) => {
     try {
         const node = await HyNode.findById(req.params.id);
@@ -1373,7 +1373,7 @@ router.get('/nodes/:id/terminal', requireAuth, async (req, res) => {
 
 // ==================== STATS ====================
 
-// GET /panel/stats - Страница статистики
+// GET /panel/stats - Stats page
 router.get('/stats', requireAuth, async (req, res) => {
     try {
         const summary = await statsService.getSummary();
@@ -1388,7 +1388,7 @@ router.get('/stats', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/stats/api/summary - Сводная статистика
+// GET /panel/stats/api/summary - Summary stats
 router.get('/stats/api/summary', requireAuth, async (req, res) => {
     try {
         const summary = await statsService.getSummary();
@@ -1398,7 +1398,7 @@ router.get('/stats/api/summary', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/stats/api/online - Данные для графика онлайна
+// GET /panel/stats/api/online - Online chart data
 router.get('/stats/api/online', requireAuth, async (req, res) => {
     try {
         const period = req.query.period || '24h';
@@ -1409,7 +1409,7 @@ router.get('/stats/api/online', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/stats/api/traffic - Данные для графика трафика
+// GET /panel/stats/api/traffic - Traffic chart data
 router.get('/stats/api/traffic', requireAuth, async (req, res) => {
     try {
         const period = req.query.period || '24h';
@@ -1420,7 +1420,7 @@ router.get('/stats/api/traffic', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/stats/api/nodes - Данные для графика нод
+// GET /panel/stats/api/nodes - Node chart data
 router.get('/stats/api/nodes', requireAuth, async (req, res) => {
     try {
         const period = req.query.period || '24h';
@@ -1431,7 +1431,7 @@ router.get('/stats/api/nodes', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/stats/cleanup - Очистка старых данных (ручной запуск)
+// POST /panel/stats/cleanup - Cleanup old data (manual run)
 router.post('/stats/cleanup', requireAuth, async (req, res) => {
     try {
         const result = await statsService.cleanup();
@@ -1441,7 +1441,7 @@ router.post('/stats/cleanup', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/stats/api/ssh-pool - Статистика SSH пула
+// GET /panel/stats/api/ssh-pool - SSH pool stats
 router.get('/stats/api/ssh-pool', requireAuth, async (req, res) => {
     try {
         const sshPool = require('../services/sshPoolService');
@@ -1453,7 +1453,7 @@ router.get('/stats/api/ssh-pool', requireAuth, async (req, res) => {
 
 // ==================== BACKUP SETTINGS ====================
 
-// POST /panel/settings/create-backup - Создать бэкап сейчас
+// POST /panel/settings/create-backup - Create backup now
 router.post('/settings/create-backup', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
@@ -1472,7 +1472,7 @@ router.post('/settings/create-backup', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/settings/test-s3 - Проверить подключение к S3
+// POST /panel/settings/test-s3 - Test S3 connection
 router.post('/settings/test-s3', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
@@ -1500,7 +1500,7 @@ router.post('/settings/test-s3', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/settings/backups - Список локальных бэкапов
+// GET /panel/settings/backups - List local backups
 router.get('/settings/backups', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
@@ -1511,7 +1511,7 @@ router.get('/settings/backups', requireAuth, async (req, res) => {
     }
 });
 
-// GET /panel/settings/backups-s3 - Список бэкапов в S3
+// GET /panel/settings/backups-s3 - List backups in S3
 router.get('/settings/backups-s3', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
@@ -1528,7 +1528,7 @@ router.get('/settings/backups-s3', requireAuth, async (req, res) => {
     }
 });
 
-// POST /panel/settings/restore-backup - Восстановление из бэкапа (локального или S3)
+// POST /panel/settings/restore-backup - Restore from backup (local or S3)
 router.post('/settings/restore-backup', requireAuth, async (req, res) => {
     try {
         const backupService = require('../services/backupService');
@@ -1561,4 +1561,3 @@ router.post('/settings/restore-backup', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
-

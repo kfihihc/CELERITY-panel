@@ -1,5 +1,5 @@
 /**
- * API для управления нодами Hysteria
+ * API for managing Hysteria nodes
  */
 
 const express = require('express');
@@ -12,7 +12,7 @@ const cache = require('../services/cacheService');
 const logger = require('../utils/logger');
 
 /**
- * Инвалидация кэша при изменении нод
+ * Invalidate cache when nodes change
  */
 async function invalidateNodesCache() {
     await cache.invalidateNodes();
@@ -21,7 +21,7 @@ async function invalidateNodesCache() {
 }
 
 /**
- * GET /nodes - Список всех нод
+ * GET /nodes - List all nodes
  */
 router.get('/', async (req, res) => {
     try {
@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /nodes/:id - Получить ноду
+ * GET /nodes/:id - Get a node
  */
 router.get('/:id', async (req, res) => {
     try {
@@ -54,7 +54,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Считаем пользователей на этой ноде
+        // Count users on this node
         const userCount = await HyUser.countDocuments({
             nodes: node._id,
             enabled: true
@@ -71,7 +71,7 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * POST /nodes - Создать ноду
+ * POST /nodes - Create a node
  */
 router.post('/', async (req, res) => {
     try {
@@ -84,13 +84,13 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'name и ip обязательны' });
         }
         
-        // Проверяем уникальность IP
+        // Check IP uniqueness
         const existing = await HyNode.findOne({ ip });
         if (existing) {
             return res.status(409).json({ error: 'Нода с таким IP уже существует' });
         }
         
-        // Генерируем секрет для API статистики
+        // Generate a secret for the stats API
         const statsSecret = cryptoService.generateNodeSecret();
         
         const node = new HyNode({
@@ -113,7 +113,7 @@ router.post('/', async (req, res) => {
         
         await node.save();
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateNodesCache();
         
         logger.info(`[Nodes API] Created node ${name} (${ip})`);
@@ -126,7 +126,7 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * PUT /nodes/:id - Обновить ноду
+ * PUT /nodes/:id - Update a node
  */
 router.put('/:id', async (req, res) => {
     try {
@@ -152,7 +152,7 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateNodesCache();
         
         logger.info(`[Nodes API] Updated node ${node.name}`);
@@ -165,7 +165,7 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
- * DELETE /nodes/:id - Удалить ноду
+ * DELETE /nodes/:id - Delete a node
  */
 router.delete('/:id', async (req, res) => {
     try {
@@ -175,13 +175,13 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Удаляем ноду из списка пользователей
+        // Remove the node from users
         await HyUser.updateMany(
             { nodes: node._id },
             { $pull: { nodes: node._id } }
         );
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateNodesCache();
         
         logger.info(`[Nodes API] Deleted node ${node.name}`);
@@ -194,7 +194,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 /**
- * GET /nodes/:id/status - Получить статус ноды
+ * GET /nodes/:id/status - Get node status
  */
 router.get('/:id/status', async (req, res) => {
     try {
@@ -218,7 +218,7 @@ router.get('/:id/status', async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/reset-status - Сброс статуса ноды на online
+ * POST /nodes/:id/reset-status - Reset node status to online
  */
 router.post('/:id/reset-status', async (req, res) => {
     try {
@@ -242,7 +242,7 @@ router.post('/:id/reset-status', async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/sync - Принудительная синхронизация ноды
+ * POST /nodes/:id/sync - Force node synchronization
  */
 router.post('/:id/sync', async (req, res) => {
     try {
@@ -266,7 +266,7 @@ router.post('/:id/sync', async (req, res) => {
 });
 
 /**
- * GET /nodes/:id/users - Пользователи на ноде
+ * GET /nodes/:id/users - Users on the node
  */
 router.get('/:id/users', async (req, res) => {
     try {
@@ -289,7 +289,7 @@ router.get('/:id/users', async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/groups - Добавить ноду в группы
+ * POST /nodes/:id/groups - Add node to groups
  */
 router.post('/:id/groups', async (req, res) => {
     try {
@@ -309,7 +309,7 @@ router.post('/:id/groups', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateNodesCache();
         
         logger.info(`[Nodes API] Added groups for node ${node.name}`);
@@ -320,7 +320,7 @@ router.post('/:id/groups', async (req, res) => {
 });
 
 /**
- * DELETE /nodes/:id/groups/:groupId - Удалить ноду из группы
+ * DELETE /nodes/:id/groups/:groupId - Remove node from a group
  */
 router.delete('/:id/groups/:groupId', async (req, res) => {
     try {
@@ -334,7 +334,7 @@ router.delete('/:id/groups/:groupId', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateNodesCache();
         
         logger.info(`[Nodes API] Removed group ${req.params.groupId} from node ${node.name}`);
@@ -345,7 +345,7 @@ router.delete('/:id/groups/:groupId', async (req, res) => {
 });
 
 /**
- * GET /nodes/:id/config - Получить текущий конфиг ноды
+ * GET /nodes/:id/config - Get the node's current config
  */
 router.get('/:id/config', async (req, res) => {
     try {
@@ -355,7 +355,7 @@ router.get('/:id/config', async (req, res) => {
             return res.status(404).json({ error: 'Нода не найдена' });
         }
         
-        // Генерируем конфиг с HTTP авторизацией
+        // Generate config with HTTP auth
         const configGenerator = require('../services/configGenerator');
         const config = require('../../config');
         
@@ -372,7 +372,7 @@ router.get('/:id/config', async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/setup-port-hopping - Настройка port hopping на ноде
+ * POST /nodes/:id/setup-port-hopping - Configure port hopping on a node
  */
 router.post('/:id/setup-port-hopping', async (req, res) => {
     try {
@@ -396,7 +396,7 @@ router.post('/:id/setup-port-hopping', async (req, res) => {
 });
 
 /**
- * POST /nodes/:id/update-config - Обновить конфиг на ноде через SSH
+ * POST /nodes/:id/update-config - Update node config via SSH
  */
 router.post('/:id/update-config', async (req, res) => {
     try {

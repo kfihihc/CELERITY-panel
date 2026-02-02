@@ -1,5 +1,5 @@
 /**
- * API для управления пользователями Hysteria
+ * API for managing Hysteria users
  */
 
 const express = require('express');
@@ -13,21 +13,21 @@ const logger = require('../utils/logger');
 const { getNodesByGroups } = require('../utils/helpers');
 
 /**
- * Инвалидация кэша пользователя
+ * Invalidate user cache
  */
 async function invalidateUserCache(userId, subscriptionToken) {
     await cache.invalidateUser(userId);
     if (subscriptionToken) {
         await cache.invalidateSubscription(subscriptionToken);
     }
-    // Очищаем устройства пользователя
+    // Clear user devices
     await cache.clearDeviceIPs(userId);
-    // Инвалидируем счётчики дашборда
+    // Invalidate dashboard counters
     await cache.invalidateDashboardCounts();
 }
 
 /**
- * GET /users - Список всех пользователей
+ * GET /users - List all users
  */
 router.get('/', async (req, res) => {
     try {
@@ -37,14 +37,14 @@ router.get('/', async (req, res) => {
         if (enabled !== undefined) filter.enabled = enabled === 'true';
         if (group) filter.groups = group;
         
-        // Определяем поле для сортировки
+        // Determine the sort field
         let sortField = {};
         const order = sortOrder === 'asc' ? 1 : -1;
         
         switch (sortBy) {
             case 'traffic':
-                // Для сортировки по трафику нужно использовать aggregation
-                // так как трафик - это сумма tx + rx
+                // For traffic sorting, use aggregation
+                // because traffic is tx + rx
                 const pipeline = [
                     { $match: filter },
                     {
@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
                 
                 const usersAggregated = await HyUser.aggregate(pipeline);
                 
-                // Populate вручную после aggregation
+                // Populate manually after aggregation
                 const users = await HyUser.populate(usersAggregated, [
                     { path: 'nodes', select: 'name ip' },
                     { path: 'groups', select: 'name color' }
@@ -120,7 +120,7 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /users/:userId - Получить пользователя
+ * GET /users/:userId - Get a user
  */
 router.get('/:userId', async (req, res) => {
     try {
@@ -140,7 +140,7 @@ router.get('/:userId', async (req, res) => {
 });
 
 /**
- * POST /users - Создать пользователя
+ * POST /users - Create a user
  * Body: { userId, username?, groups?, enabled?, trafficLimit?, expireAt? }
  */
 router.post('/', async (req, res) => {
@@ -151,16 +151,16 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'userId обязателен' });
         }
         
-        // Проверяем существование
+        // Check for existing user
         const existing = await HyUser.findOne({ userId });
         if (existing) {
             return res.status(409).json({ error: 'Пользователь уже существует', user: existing });
         }
         
-        // Генерируем пароль
+        // Generate password
         const password = cryptoService.generatePassword(userId);
         
-        // Группы (массив ObjectId)
+        // Groups (ObjectId array)
         const userGroups = groups || [];
         
         const user = new HyUser({
@@ -171,7 +171,7 @@ router.post('/', async (req, res) => {
             enabled: enabled !== undefined ? enabled : false,
             trafficLimit: trafficLimit || 0,
             expireAt: expireAt || null,
-            nodes: [], // Ноды автоматически по группам
+            nodes: [], // Nodes are assigned automatically by groups
         });
         
         await user.save();
@@ -186,7 +186,7 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * PUT /users/:userId - Обновить пользователя
+ * PUT /users/:userId - Update a user
  */
 router.put('/:userId', async (req, res) => {
     try {
@@ -227,7 +227,7 @@ router.put('/:userId', async (req, res) => {
         .populate('nodes', 'name ip')
         .populate('groups', 'name color');
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Updated user ${req.params.userId}`);
@@ -240,7 +240,7 @@ router.put('/:userId', async (req, res) => {
 });
 
 /**
- * DELETE /users/:userId - Удалить пользователя
+ * DELETE /users/:userId - Delete a user
  */
 router.delete('/:userId', async (req, res) => {
     try {
@@ -250,7 +250,7 @@ router.delete('/:userId', async (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Deleted user ${req.params.userId}`);
@@ -263,7 +263,7 @@ router.delete('/:userId', async (req, res) => {
 });
 
 /**
- * POST /users/:userId/enable - Включить пользователя
+ * POST /users/:userId/enable - Enable a user
  */
 router.post('/:userId/enable', async (req, res) => {
     try {
@@ -277,7 +277,7 @@ router.post('/:userId/enable', async (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Enabled user ${req.params.userId}`);
@@ -288,7 +288,7 @@ router.post('/:userId/enable', async (req, res) => {
 });
 
 /**
- * POST /users/:userId/disable - Отключить пользователя
+ * POST /users/:userId/disable - Disable a user
  */
 router.post('/:userId/disable', async (req, res) => {
     try {
@@ -302,7 +302,7 @@ router.post('/:userId/disable', async (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Disabled user ${req.params.userId}`);
@@ -313,7 +313,7 @@ router.post('/:userId/disable', async (req, res) => {
 });
 
 /**
- * POST /users/:userId/groups - Добавить пользователя в группы
+ * POST /users/:userId/groups - Add a user to groups
  * Body: { groups: ['groupId1', 'groupId2'] }
  */
 router.post('/:userId/groups', async (req, res) => {
@@ -334,7 +334,7 @@ router.post('/:userId/groups', async (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Added groups to user ${req.params.userId}`);
@@ -345,7 +345,7 @@ router.post('/:userId/groups', async (req, res) => {
 });
 
 /**
- * DELETE /users/:userId/groups/:groupId - Удалить пользователя из группы
+ * DELETE /users/:userId/groups/:groupId - Remove a user from a group
  */
 router.delete('/:userId/groups/:groupId', async (req, res) => {
     try {
@@ -359,7 +359,7 @@ router.delete('/:userId/groups/:groupId', async (req, res) => {
             return res.status(404).json({ error: 'Пользователь не найден' });
         }
         
-        // Инвалидируем кэш
+        // Invalidate cache
         await invalidateUserCache(req.params.userId, user.subscriptionToken);
         
         logger.info(`[Users API] Removed group ${req.params.groupId} from user ${req.params.userId}`);
@@ -370,7 +370,7 @@ router.delete('/:userId/groups/:groupId', async (req, res) => {
 });
 
 /**
- * POST /users/sync-from-main - Синхронизация с основной БД
+ * POST /users/sync-from-main - Sync with the primary database
  * Body: { users: [{ userId, username, enabled, groups }] }
  */
 router.post('/sync-from-main', async (req, res) => {
@@ -392,7 +392,7 @@ router.post('/sync-from-main', async (req, res) => {
                 const existing = await HyUser.findOne({ userId });
                 
                 if (existing) {
-                    // Обновляем
+                    // Update existing
                     const updates = {};
                     if (enabled !== undefined && enabled !== existing.enabled) {
                         updates.enabled = enabled;
@@ -407,7 +407,7 @@ router.post('/sync-from-main', async (req, res) => {
                         updated++;
                     }
                 } else {
-                    // Создаём нового
+                    // Create a new user
                     const password = cryptoService.generatePassword(userId);
                     
                     await HyUser.create({

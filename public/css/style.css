@@ -1685,7 +1685,7 @@ html {
     display: none;
 }
 
-/* Mobile Cards - скрыты по умолчанию (показываются только на мобилке) */
+/* Mobile Cards - hidden by default (shown only on mobile) */
 .mobile-nodes-list,
 .mobile-users-list {
     display: none;
@@ -1726,12 +1726,12 @@ html {
 }
 
 @media (max-width: 768px) {
-    /* Скрываем desktop таблицы */
+    /* Hide desktop tables */
     .table-wrapper {
         display: none !important;
     }
     
-    /* Показываем мобильные карточки */
+    /* Show mobile cards */
     .mobile-nodes-list,
     .mobile-users-list {
         display: flex !important;
@@ -1899,12 +1899,12 @@ html {
         width: 100%;
     }
     
-    /* Tables - скрываем на мобилках */
+    /* Tables - hide on mobile */
     .table-wrapper {
         display: none;
     }
     
-    /* Mobile Cards - показываем только на мобилке */
+    /* Mobile Cards - show only on mobile */
     .mobile-nodes-list,
     .mobile-users-list {
         display: flex;

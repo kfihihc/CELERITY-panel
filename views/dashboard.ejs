@@ -476,7 +476,7 @@ async function loadSystemStats() {
         const data = await res.json();
         
         if (data.success) {
-            // CPU в процентах
+            // CPU percentage
             const cpuPercent = data.cpu.percent || 0;
             const cpuBar = document.getElementById('cpuBar');
             cpuBar.style.width = cpuPercent + '%';
